@@ -1,6 +1,6 @@
 {
   "name": "@k1e1n04/mav",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Multi-agent view — manage multiple AI CLI sessions in one terminal",
   "type": "module",
   "bin": {
@@ -20,12 +20,14 @@
     "bin/",
     "lua/",
     "plugin/",
+    "scripts/",
     "LICENSE",
     "README.md"
   ],
   "scripts": {
     "build": "tsc && node scripts/postbuild.mjs",
     "dev": "tsx bin/mav.ts",
+    "postinstall": "node scripts/postinstall.mjs",
     "test": "vitest run",
     "test:watch": "vitest",
     "prepublishOnly": "pnpm test && pnpm build"
