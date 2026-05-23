@@ -6,11 +6,24 @@
   "bin": {
     "mav": "./dist/bin/mav.js"
   },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/k1e1n04/mav.git"
+  },
+  "files": [
+    "dist/",
+    "src/",
+    "bin/",
+    "LICENSE",
+    "README.md"
+  ],
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && node scripts/postbuild.mjs",
     "dev": "tsx bin/mav.ts",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "prepublishOnly": "pnpm test && pnpm build"
   },
   "dependencies": {
     "commander": "13.1.0",
