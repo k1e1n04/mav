@@ -14,6 +14,7 @@ export class AgentSession extends EventEmitter {
   readonly id: string
   readonly type: string
   readonly cmd: string
+  readonly cwd: string
   displayName: string
   baseArgs: string[] = []
   status: SessionStatus = 'running'
@@ -33,6 +34,7 @@ export class AgentSession extends EventEmitter {
     this.id = `${config.type}#${counters[config.type]}`
     this.type = config.type
     this.cmd = config.cmd
+    this.cwd = config.cwd ?? process.cwd()
     this.displayName = `${config.type} ${counters[config.type]}`
 
     let proc: pty.IPty
@@ -41,6 +43,7 @@ export class AgentSession extends EventEmitter {
         name: 'xterm-256color',
         cols,
         rows,
+        cwd: this.cwd,
         env: process.env as Record<string, string>,
       })
     } catch (err) {

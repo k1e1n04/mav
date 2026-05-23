@@ -226,7 +226,47 @@ describe('OverviewUI', () => {
       type: 'copilot',
       cmd: 'copilot',
       args: [],
+      cwd: process.cwd(),
     })
+  })
+
+  it('n で追加したセッションは process.cwd() を cwd として起動する', () => {
+    const initialSession = { id: 'claude-code#1', displayName: 'claude-code 1', status: 'running', logBuffer: [], write: vi.fn() }
+    const addedSession = { id: 'codex#1', displayName: 'codex 1', status: 'running', logBuffer: [], write: vi.fn(), cwd: '/tmp/project-a' }
+    const screen = { render: vi.fn() }
+    const manager = Object.assign(new EventEmitter(), {
+      sessions: [initialSession],
+      selectedIndex: 0,
+      selectedSession: initialSession,
+      selectSession(index: number) {
+        this.selectedIndex = index
+        this.selectedSession = this.sessions[index] ?? null
+      },
+      addSession: vi.fn(() => {
+        manager.sessions.push(addedSession)
+        return addedSession
+      }),
+      removeSession: vi.fn(),
+    })
+
+    const cwdSpy = vi.spyOn(process, 'cwd').mockReturnValue('/tmp/project-a')
+
+    new OverviewUI(screen as never, manager as never)
+
+    const listBox = widgets.createdLists[0]!
+    listBox.handlers.get('n')?.()
+    const prompt = widgets.createdLists[1]!
+    prompt.selected = 1
+    prompt.handlers.get('enter')?.()
+
+    expect(manager.addSession).toHaveBeenCalledWith({
+      type: 'codex',
+      cmd: 'codex',
+      args: [],
+      cwd: '/tmp/project-a',
+    })
+
+    cwdSpy.mockRestore()
   })
 
   it('一覧には各セッションの状態ラベルを同じ行で表示し、状態ごとに並べる', () => {

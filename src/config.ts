@@ -5,6 +5,7 @@ export interface AgentConfig {
   type: string
   cmd: string
   args: string[]
+  cwd?: string
   resumeArgs?: string[]
 }
 

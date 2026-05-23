@@ -2,6 +2,7 @@ import { homedir } from 'node:os'
 import { join, dirname } from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { loadConfig } from './config.js'
+import { clearCurrentSessionState, saveCurrentSessionState } from './current-session.js'
 import { loadState, saveState } from './state.js'
 import { SessionManager } from './session-manager.js'
 import { App } from './ui/app.js'
@@ -46,10 +47,11 @@ function resolveSessionArgs(
   }
 }
 
-export function start(options: StartOptions = {}): void {
+export function start(options: StartOptions = {}): SessionManager {
   const configPath =
     options.configPath ?? join(homedir(), '.config', 'mav', 'config.yaml')
   const statePath = join(dirname(configPath), 'state.json')
+  const currentSessionPath = join(homedir(), '.local', 'state', 'mav', 'current-session.json')
   const config = loadConfig(configPath)
 
   const agentsToStart = options.agentType
@@ -69,6 +71,20 @@ export function start(options: StartOptions = {}): void {
 
   const manager = new SessionManager()
   const app = new App(manager, statePath)
+  const publishSelectedSession = () => {
+    const session = manager.selectedSession
+    if (!session) {
+      clearCurrentSessionState(currentSessionPath)
+      return
+    }
+
+    saveCurrentSessionState(currentSessionPath, {
+      id: session.id,
+      type: session.type,
+      displayName: session.displayName,
+      cwd: session.cwd,
+    })
+  }
 
   const typeCounters: Record<string, number> = {}
   const configSessionIds = new Set<string>()
@@ -118,6 +134,12 @@ export function start(options: StartOptions = {}): void {
     manager.restoreLogBuffers(savedState)
   }
 
+  manager.on('selection', () => {
+    publishSelectedSession()
+  })
+
+  publishSelectedSession()
+
   // q/Ctrl+C 以外の終了（ウィンドウ閉じ等）でも state を保存する
   const saveOnExit = () => {
     try { saveState(statePath, manager) } catch { /* ignore */ }
@@ -126,4 +148,5 @@ export function start(options: StartOptions = {}): void {
   process.once('SIGHUP', () => { saveOnExit(); process.exit(0) })
 
   app.start()
+  return manager
 }

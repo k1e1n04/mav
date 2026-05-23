@@ -15,6 +15,10 @@ export class SessionManager extends EventEmitter {
   selectedIndex: number = -1
   private sessionListeners = new Map<string, SessionListeners>()
 
+  private emitSelection(): void {
+    this.emit('selection', this.selectedSession)
+  }
+
   addSession(config: AgentConfig, cols = 80, rows = 24): AgentSession {
     const session = new AgentSession(config, cols, rows)
 
@@ -33,6 +37,7 @@ export class SessionManager extends EventEmitter {
 
     if (this.selectedIndex === -1) {
       this.selectedIndex = 0
+      this.emitSelection()
     }
 
     return session
@@ -61,11 +66,14 @@ export class SessionManager extends EventEmitter {
     } else if (this.selectedIndex >= this.sessions.length) {
       this.selectedIndex = this.sessions.length - 1
     }
+
+    this.emitSelection()
   }
 
   selectSession(index: number): void {
     if (index < 0 || index >= this.sessions.length) return
     this.selectedIndex = index
+    this.emitSelection()
   }
 
   get selectedSession(): AgentSession | null {
@@ -102,5 +110,6 @@ export class SessionManager extends EventEmitter {
     this.sessions = []
     this.sessionListeners.clear()
     this.selectedIndex = -1
+    this.emitSelection()
   }
 }
