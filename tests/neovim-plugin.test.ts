@@ -4,7 +4,10 @@ import { mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
+import { isNeovimAvailable } from './support/neovim.js'
+
 const repoRoot = process.cwd()
+const describeNeovim = isNeovimAvailable() ? describe : describe.skip
 
 function runNvimScript(script: string): string {
   const root = join(tmpdir(), `mav-nvim-test-${Date.now()}-${Math.random().toString(16).slice(2)}`)
@@ -24,7 +27,7 @@ function runNvimScript(script: string): string {
   }
 }
 
-describe('Neovim plugin', () => {
+describeNeovim('Neovim plugin', () => {
   const tempRoots: string[] = []
 
   afterEach(() => {
