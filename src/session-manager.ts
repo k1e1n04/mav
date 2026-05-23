@@ -1,11 +1,13 @@
 import { EventEmitter } from 'node:events'
 import { AgentSession } from './agent.js'
 import type { AgentConfig } from './config.js'
+import type { MavState } from './state.js'
 
 type SessionListeners = {
   onData: (chunk: string) => void
   onExit: (code: number) => void
   onStatus: (status: string) => void
+  onName: (name: string) => void
 }
 
 export class SessionManager extends EventEmitter {
@@ -19,11 +21,13 @@ export class SessionManager extends EventEmitter {
     const onData = (chunk: string) => { this.emit('data', session.id, chunk) }
     const onExit = (code: number) => { this.emit('exit', session.id, code) }
     const onStatus = (status: string) => { this.emit('status', session.id, status) }
+    const onName = (name: string) => { this.emit('name', session.id, name) }
 
     session.on('data', onData)
     session.on('exit', onExit)
     session.on('status', onStatus)
-    this.sessionListeners.set(session.id, { onData, onExit, onStatus })
+    session.on('name', onName)
+    this.sessionListeners.set(session.id, { onData, onExit, onStatus, onName })
 
     this.sessions.push(session)
 
@@ -44,6 +48,7 @@ export class SessionManager extends EventEmitter {
       session.off('data', ls.onData)
       session.off('exit', ls.onExit)
       session.off('status', ls.onStatus)
+      session.off('name', ls.onName)
       this.sessionListeners.delete(id)
     }
     session.kill()
@@ -68,6 +73,15 @@ export class SessionManager extends EventEmitter {
     return this.sessions[this.selectedIndex] ?? null
   }
 
+  restoreLogBuffers(state: MavState): void {
+    for (const session of this.sessions) {
+      const saved = state.sessions[session.id]
+      if (saved) {
+        session.logBuffer = [...saved.logBuffer]
+      }
+    }
+  }
+
   killAll(): void {
     for (const session of this.sessions) {
       const ls = this.sessionListeners.get(session.id)
@@ -75,6 +89,7 @@ export class SessionManager extends EventEmitter {
         session.off('data', ls.onData)
         session.off('exit', ls.onExit)
         session.off('status', ls.onStatus)
+        session.off('name', ls.onName)
       }
       session.kill()
     }

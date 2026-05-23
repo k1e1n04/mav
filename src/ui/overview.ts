@@ -61,6 +61,11 @@ export class OverviewUI {
       this.syncList()
       screen.render()
     })
+
+    manager.on('name', () => {
+      this.syncList()
+      screen.render()
+    })
   }
 
   private bindKeys(): void {
@@ -194,7 +199,8 @@ export class OverviewUI {
           : session.status === 'idle'    ? '○'
           : session.status === 'done'    ? '✓'
           : '✗'
-        items.push(` ${statusIcon} ${session.id}  ${this.getStatusLabel(session.status)}`)
+        const sessionLabel = session.displayName ?? session.id
+        items.push(` ${statusIcon} ${sessionLabel}  ${this.getStatusLabel(session.status)}`)
         if (session.id === selectedId) {
           selectedDisplayIndex = items.length - 1
         }

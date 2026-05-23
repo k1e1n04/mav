@@ -64,6 +64,33 @@ describe('AgentSession', () => {
     expect(getMockPty().write).toHaveBeenCalledWith('hello\n')
   })
 
+  it('初期表示名は agent type と連番になる', () => {
+    expect(session.displayName).toMatch(/^claude-code \d+$/)
+  })
+
+  it('最初の入力行から表示名を自動設定する', () => {
+    session.write('fix session naming in overview\n')
+
+    expect(session.displayName).toBe('fix session naming in...')
+  })
+
+  it('最初の入力が短すぎる場合は仮名を維持する', () => {
+    const originalName = session.displayName
+
+    session.write('y\n')
+
+    expect(session.displayName).toBe(originalName)
+  })
+
+  it('表示名は最初の確定後に再更新しない', () => {
+    session.write('first meaningful prompt\n')
+    const lockedName = session.displayName
+
+    session.write('second prompt\n')
+
+    expect(session.displayName).toBe(lockedName)
+  })
+
   it('kill()でPTYが終了される', () => {
     session.kill()
     expect(getMockPty().kill).toHaveBeenCalled()

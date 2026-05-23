@@ -74,8 +74,8 @@ describe('OverviewUI', () => {
   })
 
   it('n で追加したセッションを選択状態にする', () => {
-    const initialSession = { id: 'claude-code#1', status: 'running', logBuffer: [], write: vi.fn() }
-    const addedSession = { id: 'codex#1', status: 'running', logBuffer: [], write: vi.fn() }
+    const initialSession = { id: 'claude-code#1', displayName: 'claude-code 1', status: 'running', logBuffer: [], write: vi.fn() }
+    const addedSession = { id: 'codex#1', displayName: 'codex 1', status: 'running', logBuffer: [], write: vi.fn() }
     const screen = { render: vi.fn() }
     const manager = Object.assign(new EventEmitter(), {
       sessions: [initialSession],
@@ -108,9 +108,9 @@ describe('OverviewUI', () => {
   })
 
   it('一覧カーソルが selectedSession とずれていても n で追加した新規セッションを選択する', () => {
-    const firstSession = { id: 'claude-code#1', status: 'running', logBuffer: [], write: vi.fn() }
-    const secondSession = { id: 'codex#1', status: 'running', logBuffer: [], write: vi.fn() }
-    const addedSession = { id: 'gemini-cli#1', status: 'running', logBuffer: [], write: vi.fn() }
+    const firstSession = { id: 'claude-code#1', displayName: 'claude-code 1', status: 'running', logBuffer: [], write: vi.fn() }
+    const secondSession = { id: 'codex#1', displayName: 'codex 1', status: 'running', logBuffer: [], write: vi.fn() }
+    const addedSession = { id: 'gemini-cli#1', displayName: 'gemini-cli 1', status: 'running', logBuffer: [], write: vi.fn() }
     const screen = { render: vi.fn() }
     const manager = Object.assign(new EventEmitter(), {
       sessions: [firstSession, secondSession],
@@ -144,8 +144,8 @@ describe('OverviewUI', () => {
   })
 
   it('n でモデル選択後に新規セッションへの遷移コールバックを呼ぶ', () => {
-    const initialSession = { id: 'claude-code#1', status: 'running', logBuffer: [], write: vi.fn() }
-    const addedSession = { id: 'codex#1', status: 'running', logBuffer: [], write: vi.fn() }
+    const initialSession = { id: 'claude-code#1', displayName: 'claude-code 1', status: 'running', logBuffer: [], write: vi.fn() }
+    const addedSession = { id: 'codex#1', displayName: 'codex 1', status: 'running', logBuffer: [], write: vi.fn() }
     const onSessionCreated = vi.fn()
     const screen = { render: vi.fn() }
     const manager = Object.assign(new EventEmitter(), {
@@ -176,8 +176,8 @@ describe('OverviewUI', () => {
   })
 
   it('copilot選択時は copilot コマンドでセッションを起動する', () => {
-    const initialSession = { id: 'claude-code#1', status: 'running', logBuffer: [], write: vi.fn() }
-    const addedSession = { id: 'copilot#1', status: 'running', logBuffer: [], write: vi.fn() }
+    const initialSession = { id: 'claude-code#1', displayName: 'claude-code 1', status: 'running', logBuffer: [], write: vi.fn() }
+    const addedSession = { id: 'copilot#1', displayName: 'copilot 1', status: 'running', logBuffer: [], write: vi.fn() }
     const screen = { render: vi.fn() }
     const manager = Object.assign(new EventEmitter(), {
       sessions: [initialSession],
@@ -213,24 +213,28 @@ describe('OverviewUI', () => {
   it('一覧には各セッションの状態ラベルを同じ行で表示し、状態ごとに並べる', () => {
     const firstSession = {
       id: 'claude-code#2',
+      displayName: 'fix recording bug',
       status: 'done',
       logBuffer: ['thinking...\r\n'],
       write: vi.fn(),
     }
     const secondSession = {
       id: 'codex#1',
+      displayName: 'codex 1',
       status: 'running',
       logBuffer: ['completed successfully\r\n'],
       write: vi.fn(),
     }
     const thirdSession = {
       id: 'gemini-cli#1',
+      displayName: 'gemini-cli 1',
       status: 'idle',
       logBuffer: ['waiting\r\n'],
       write: vi.fn(),
     }
     const fourthSession = {
       id: 'copilot#1',
+      displayName: 'copilot 1',
       status: 'error',
       logBuffer: ['failed\r\n'],
       write: vi.fn(),
@@ -254,13 +258,13 @@ describe('OverviewUI', () => {
     const listBox = widgets.createdLists[0]!
     expect(listBox.items).toHaveLength(8)
     expect(listBox.items[0]).toContain('Working')
-    expect(listBox.items[1]).toContain('codex#1')
+    expect(listBox.items[1]).toContain('codex 1')
     expect(listBox.items[1]).toContain('working')
     expect(listBox.items[2]).toContain('Waiting')
-    expect(listBox.items[3]).toContain('gemini-cli#1')
+    expect(listBox.items[3]).toContain('gemini-cli 1')
     expect(listBox.items[3]).toContain('waiting')
     expect(listBox.items[4]).toContain('Complete')
-    expect(listBox.items[5]).toContain('claude-code#2')
+    expect(listBox.items[5]).toContain('fix recording bug')
     expect(listBox.items[5]).toContain('complete')
     expect(listBox.items[6]).toContain('Failed')
     expect(listBox.items[7]).toContain('failed')

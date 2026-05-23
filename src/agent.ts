@@ -8,9 +8,12 @@ const counters: Record<string, number> = {}
 
 export class AgentSession extends EventEmitter {
   private static readonly IDLE_TIMEOUT_MS = 1500
+  private static readonly DISPLAY_NAME_MAX_LENGTH = 25
+  private static readonly DISPLAY_NAME_MIN_LENGTH = 3
 
   readonly id: string
   readonly type: string
+  displayName: string
   status: SessionStatus = 'running'
   logBuffer: string[] = []
   lastPrompt: string = ''
@@ -18,12 +21,15 @@ export class AgentSession extends EventEmitter {
   private ptyProcess: pty.IPty | undefined
   private exited = false
   private idleTimer: ReturnType<typeof setTimeout> | null = null
+  private displayNameLocked = false
+  private initialInputBuffer = ''
 
   constructor(config: AgentConfig, cols: number, rows: number) {
     super()
     counters[config.type] = (counters[config.type] ?? 0) + 1
     this.id = `${config.type}#${counters[config.type]}`
     this.type = config.type
+    this.displayName = `${config.type} ${counters[config.type]}`
 
     let proc: pty.IPty
     try {
@@ -61,6 +67,7 @@ export class AgentSession extends EventEmitter {
 
   write(data: string): void {
     if (this.exited) return
+    this.updateDisplayNameFromInput(data)
     this.ptyProcess?.write(data)
   }
 
@@ -106,5 +113,46 @@ export class AgentSession extends EventEmitter {
     }
     clearTimeout(this.idleTimer)
     this.idleTimer = null
+  }
+
+  private updateDisplayNameFromInput(data: string): void {
+    if (this.displayNameLocked) {
+      return
+    }
+
+    this.initialInputBuffer += data
+    const newlineIndex = this.initialInputBuffer.search(/\r|\n/)
+    if (newlineIndex === -1) {
+      return
+    }
+
+    const firstLine = this.initialInputBuffer.slice(0, newlineIndex)
+    this.displayNameLocked = true
+    this.initialInputBuffer = ''
+
+    const normalized = AgentSession.normalizeDisplayName(firstLine)
+    if (normalized.length < AgentSession.DISPLAY_NAME_MIN_LENGTH) {
+      return
+    }
+
+    this.displayName = normalized
+    this.emit('name', normalized)
+  }
+
+  private static normalizeDisplayName(input: string): string {
+    const withoutAnsi = input
+      .replace(/\x1b\][^\x07]*(?:\x07|\x1b\\)/g, '')
+      .replace(/\x1b\[[0-?]*[ -/]*[@-~]/g, '')
+      .replace(/\x1b[@-Z\\-_]/g, '')
+    const collapsed = withoutAnsi
+      .replace(/[\x00-\x1f\x7f]+/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+
+    if (collapsed.length <= AgentSession.DISPLAY_NAME_MAX_LENGTH) {
+      return collapsed
+    }
+
+    return `${collapsed.slice(0, AgentSession.DISPLAY_NAME_MAX_LENGTH - 3).trimEnd()}...`
   }
 }
