@@ -15,6 +15,8 @@
     "dist/",
     "src/",
     "bin/",
+    "lua/",
+    "plugin/",
     "LICENSE",
     "README.md"
   ],
