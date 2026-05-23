@@ -31,13 +31,32 @@ brew tap k1e1n04/mav https://github.com/k1e1n04/mav.git
 brew install mav
 ```
 
-### npm / pnpm
+### npm
 
 ```bash
 npm install -g @k1e1n04/mav
-# or
-pnpm add -g @k1e1n04/mav
 ```
+
+Requires Xcode Command Line Tools (macOS) or `build-essential` (Linux) for the native `node-pty` module.
+
+```bash
+# macOS
+xcode-select --install
+
+# Ubuntu / Debian
+sudo apt-get install -y build-essential python3
+```
+
+### pnpm
+
+pnpm v10+ blocks install scripts by default. An extra step is needed after install:
+
+```bash
+pnpm add -g @k1e1n04/mav
+pnpm approve-builds -g   # select node-pty to allow its native build
+```
+
+> **Tip:** On macOS, Homebrew handles all of this automatically — use it if you prefer a simpler install.
 
 ### Build from Source
 

@@ -38,21 +38,13 @@ jobs:
       - name: Build
         run: pnpm build
 
-      - name: Create release tarball
-        run: |
-          VERSION="${GITHUB_REF_NAME#v}"
-          tar -czf mav-${VERSION}.tar.gz \
-            --exclude='node_modules' \
-            --exclude='.git' \
-            --exclude='dist' \
-            --exclude='.superpowers' \
-            .
-
-      - name: Compute SHA256
+      - name: Fetch GitHub archive and compute SHA256
         id: sha256
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
-          SHA=$(sha256sum mav-${VERSION}.tar.gz | awk '{print $1}')
+          curl -sL "https://github.com/k1e1n04/mav/archive/refs/tags/v${VERSION}.tar.gz" \
+            -o "mav-${VERSION}.tar.gz"
+          SHA=$(sha256sum "mav-${VERSION}.tar.gz" | awk '{print $1}')
           echo "sha256=${SHA}" >> "$GITHUB_OUTPUT"
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
 

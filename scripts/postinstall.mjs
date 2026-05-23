@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Rebuild node-pty's native binary if it wasn't built during install.
-// pnpm v9+ blocks transitive dependency install scripts by default, so
-// we trigger the build here from the package's own postinstall.
+// Runs automatically when installed via npm.
+// pnpm v10+ also blocks this script unless approved with `pnpm approve-builds -g`.
 import { execSync } from 'node:child_process'
 import { existsSync } from 'node:fs'
 import { dirname } from 'node:path'
