@@ -3,3 +3,5 @@ dist/
 *.js.map
 .superpowers/
 .worktrees/
+.pnpm-store/
+nvim.log
