@@ -100,7 +100,7 @@ export class OverviewUI {
       this.showAddPrompt()
     })
 
-    this.listBox.key('d', () => {
+    this.listBox.key(['d', 'C-x'], () => {
       const session = this.manager.selectedSession
       if (session) {
         this.manager.removeSession(session.id)
