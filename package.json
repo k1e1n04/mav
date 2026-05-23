@@ -1,0 +1,35 @@
+{
+  "name": "mav",
+  "version": "0.1.0",
+  "description": "Multi-agent view — manage multiple AI CLI sessions in one terminal",
+  "type": "module",
+  "bin": {
+    "mav": "./dist/bin/mav.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx bin/mav.ts",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "commander": "13.1.0",
+    "js-yaml": "4.1.0",
+    "neo-blessed": "0.2.0",
+    "node-pty": "1.0.0"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild",
+      "node-pty"
+    ]
+  },
+  "devDependencies": {
+    "@types/blessed": "^0.1.27",
+    "@types/js-yaml": "4.0.9",
+    "@types/node": "22.15.21",
+    "tsx": "4.19.3",
+    "typescript": "5.8.3",
+    "vitest": "3.2.0"
+  }
+}
