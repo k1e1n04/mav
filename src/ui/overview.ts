@@ -226,17 +226,23 @@ export class OverviewUI {
   private updateLog(): void {
     const lines: string[] = []
     for (const session of this.manager.sessions) {
-      const recent = session.logBuffer.slice(-20)
-      for (const chunk of recent) {
-        // Strip CSI, OSC, and two-char escape sequences
-        const stripped = chunk
-          .replace(/\x1b\[[\x30-\x3f]*[\x20-\x2f]*[\x40-\x7e]/g, '')
-          .replace(/\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)/g, '')
-          .replace(/\x1b[A-Za-z]/g, '')
-        lines.push(`{cyan-fg}[${session.id}]{/cyan-fg} ${stripped}`)
+      // Combine recent chunks, strip all escape sequences, then split into lines
+      const raw = session.logBuffer.slice(-30).join('')
+      const stripped = raw
+        .replace(/\x1b\[[\x30-\x3f]*[\x20-\x2f]*[\x40-\x7e]/g, '') // CSI
+        .replace(/\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)/g, '')           // OSC
+        .replace(/\x1b[A-Za-z]/g, '')                                  // two-char
+        .replace(/\r/g, '\n')                                          // CR → newline for splitting
+      const textLines = stripped
+        .split('\n')
+        .map(l => l.trim())
+        .filter(l => l.length > 0)
+        .slice(-5) // last 5 non-empty lines per session
+      for (const line of textLines) {
+        lines.push(`{cyan-fg}[${session.id}]{/cyan-fg} ${line}`)
       }
     }
-    this.logBox.setContent(lines.join(''))
+    this.logBox.setContent(lines.join('\n'))
     this.logBox.setScrollPerc(100)
   }
 

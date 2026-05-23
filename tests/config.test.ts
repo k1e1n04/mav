@@ -55,4 +55,11 @@ describe('loadConfig', () => {
     expect(config.agents[0].cmd).toBe('gh')
     expect(config.agents[0].args).toEqual(['copilot', 'suggest'])
   })
+
+  it('args が配列でない場合はデフォルトargsにフォールバックする', () => {
+    const yaml = `agents:\n  - type: codex\n    args: nope\n`
+    writeFileSync(join(TMP, 'config.yaml'), yaml)
+    const config = loadConfig(join(TMP, 'config.yaml'))
+    expect(config.agents[0].args).toEqual([])
+  })
 })

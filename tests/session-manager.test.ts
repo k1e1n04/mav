@@ -87,6 +87,21 @@ describe('SessionManager', () => {
     expect(manager.selectedIndex).toBe(0)
   })
 
+  it('選択中より前のセッション削除で同じセッションを指し続ける', () => {
+    manager.addSession({ type: 'claude-code', cmd: 'claude', args: [] })
+    manager.addSession({ type: 'codex', cmd: 'codex', args: [] })
+    manager.addSession({ type: 'gemini-cli', cmd: 'gemini', args: [] })
+    manager.addSession({ type: 'copilot', cmd: 'gh', args: ['copilot', 'suggest'] })
+    manager.selectSession(2)
+
+    const selectedBefore = manager.selectedSession
+
+    manager.removeSession(manager.sessions[0]!.id)
+
+    expect(manager.selectedIndex).toBe(1)
+    expect(manager.selectedSession).toBe(selectedBefore)
+  })
+
   it('全削除後 selectedIndex は -1 になる', () => {
     manager.addSession({ type: 'claude-code', cmd: 'claude', args: [] })
     manager.removeSession(manager.sessions[0]!.id)
