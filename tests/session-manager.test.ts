@@ -125,4 +125,13 @@ describe('SessionManager', () => {
     session.emit('data', 'hello')
     expect(handler).toHaveBeenCalledWith(session.id, 'hello')
   })
+
+  it('status変化時にstatusイベントが発火される', () => {
+    const handler = vi.fn()
+    manager.on('status', handler)
+    manager.addSession({ type: 'claude-code', cmd: 'claude', args: [] })
+    const session = manager.sessions[0]!
+    session.emit('status', 'idle')
+    expect(handler).toHaveBeenCalledWith(session.id, 'idle')
+  })
 })

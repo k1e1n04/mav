@@ -26,6 +26,7 @@ describe('AgentSession', () => {
   let onExitCb: ((e: { exitCode: number }) => void) | undefined
 
   beforeEach(() => {
+    vi.useFakeTimers()
     vi.clearAllMocks()
     getMockPty().onData.mockImplementation((cb: (data: string) => void) => { onDataCb = cb })
     getMockPty().onExit.mockImplementation((cb: (e: { exitCode: number }) => void) => { onExitCb = cb })
@@ -88,6 +89,33 @@ describe('AgentSession', () => {
     expect(handler).toHaveBeenCalledWith('chunk')
   })
 
+  it('一定時間出力が止まるとstatus=idleになる', () => {
+    onDataCb?.('chunk')
+
+    vi.advanceTimersByTime(1500)
+
+    expect(session.status).toBe('idle')
+  })
+
+  it('idle後に再度出力が来るとstatus=runningへ戻る', () => {
+    onDataCb?.('chunk')
+    vi.advanceTimersByTime(1500)
+
+    onDataCb?.('next chunk')
+
+    expect(session.status).toBe('running')
+  })
+
+  it('status変化時にstatusイベントが発火される', () => {
+    const handler = vi.fn()
+    session.on('status', handler)
+
+    onDataCb?.('chunk')
+    vi.advanceTimersByTime(1500)
+
+    expect(handler).toHaveBeenCalledWith('idle')
+  })
+
   it('exit時にonExitイベントが発火される', () => {
     const handler = vi.fn()
     session.on('exit', handler)
@@ -98,6 +126,7 @@ describe('AgentSession', () => {
 
 describe('AgentSession — ID', () => {
   beforeEach(() => {
+    vi.useRealTimers()
     vi.clearAllMocks()
     getMockPty().onData.mockImplementation(vi.fn())
     getMockPty().onExit.mockImplementation(vi.fn())

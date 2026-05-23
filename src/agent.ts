@@ -7,6 +7,8 @@ export type SessionStatus = 'running' | 'idle' | 'done' | 'error'
 const counters: Record<string, number> = {}
 
 export class AgentSession extends EventEmitter {
+  private static readonly IDLE_TIMEOUT_MS = 1500
+
   readonly id: string
   readonly type: string
   status: SessionStatus = 'running'
@@ -15,6 +17,7 @@ export class AgentSession extends EventEmitter {
 
   private ptyProcess: pty.IPty | undefined
   private exited = false
+  private idleTimer: ReturnType<typeof setTimeout> | null = null
 
   constructor(config: AgentConfig, cols: number, rows: number) {
     super()
@@ -42,11 +45,14 @@ export class AgentSession extends EventEmitter {
 
     this.ptyProcess.onData((data) => {
       this.appendLog(data)
+      this.setStatus('running')
+      this.scheduleIdleTimer()
       this.emit('data', data)
     })
 
     this.ptyProcess.onExit(({ exitCode }) => {
-      this.status = exitCode === 0 ? 'done' : 'error'
+      this.clearIdleTimer()
+      this.setStatus(exitCode === 0 ? 'done' : 'error')
       this.exited = true
       this.ptyProcess = undefined
       this.emit('exit', exitCode)
@@ -60,6 +66,7 @@ export class AgentSession extends EventEmitter {
 
   kill(): void {
     if (this.exited) return
+    this.clearIdleTimer()
     this.ptyProcess?.kill()
   }
 
@@ -73,5 +80,31 @@ export class AgentSession extends EventEmitter {
     if (this.logBuffer.length > 500) {
       this.logBuffer.splice(0, this.logBuffer.length - 500)
     }
+  }
+
+  private setStatus(nextStatus: SessionStatus): void {
+    if (this.status === nextStatus) {
+      return
+    }
+    this.status = nextStatus
+    this.emit('status', nextStatus)
+  }
+
+  private scheduleIdleTimer(): void {
+    if (this.exited) return
+    this.clearIdleTimer()
+    this.idleTimer = setTimeout(() => {
+      this.idleTimer = null
+      if (this.exited) return
+      this.setStatus('idle')
+    }, AgentSession.IDLE_TIMEOUT_MS)
+  }
+
+  private clearIdleTimer(): void {
+    if (!this.idleTimer) {
+      return
+    }
+    clearTimeout(this.idleTimer)
+    this.idleTimer = null
   }
 }

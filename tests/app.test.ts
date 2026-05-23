@@ -242,7 +242,7 @@ describe('App', () => {
     expect(detailShowMock).toHaveBeenCalledTimes(1)
   })
 
-  it('overview中のscreen resizeでは右ペイン寸法へ再調整する', () => {
+  it('overview中のscreen resizeではpreviewを再描画する', () => {
     const selectedSession = { id: 'claude-code#1', resize: vi.fn() }
     const manager = {
       sessions: [selectedSession],

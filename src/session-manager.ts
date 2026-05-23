@@ -5,6 +5,7 @@ import type { AgentConfig } from './config.js'
 type SessionListeners = {
   onData: (chunk: string) => void
   onExit: (code: number) => void
+  onStatus: (status: string) => void
 }
 
 export class SessionManager extends EventEmitter {
@@ -17,10 +18,12 @@ export class SessionManager extends EventEmitter {
 
     const onData = (chunk: string) => { this.emit('data', session.id, chunk) }
     const onExit = (code: number) => { this.emit('exit', session.id, code) }
+    const onStatus = (status: string) => { this.emit('status', session.id, status) }
 
     session.on('data', onData)
     session.on('exit', onExit)
-    this.sessionListeners.set(session.id, { onData, onExit })
+    session.on('status', onStatus)
+    this.sessionListeners.set(session.id, { onData, onExit, onStatus })
 
     this.sessions.push(session)
 
@@ -40,6 +43,7 @@ export class SessionManager extends EventEmitter {
     if (ls) {
       session.off('data', ls.onData)
       session.off('exit', ls.onExit)
+      session.off('status', ls.onStatus)
       this.sessionListeners.delete(id)
     }
     session.kill()
@@ -70,6 +74,7 @@ export class SessionManager extends EventEmitter {
       if (ls) {
         session.off('data', ls.onData)
         session.off('exit', ls.onExit)
+        session.off('status', ls.onStatus)
       }
       session.kill()
     }

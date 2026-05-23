@@ -2,30 +2,19 @@ import blessed from 'neo-blessed'
 import type { Widgets } from 'neo-blessed'
 import type { SessionManager } from '../session-manager.js'
 
-type TerminalWidget = Widgets.BoxElement & {
-  write(data: string): void
-  destroy(): void
-  setLabel(label: string): void
-}
-
 export class OverviewUI {
-  private static readonly LIST_WIDTH_RATIO = 0.25
-  private static readonly INPUT_BAR_HEIGHT = 3
-  private static readonly BORDER_SIZE = 2
-  private static readonly OSC_SEQUENCE_PATTERN = /\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)/g
-  private static readonly ALT_SCREEN_PATTERN = /\x1b\[\?104[79][hl]|\x1b\[\?47[hl]/g
-  private static readonly DEVICE_CONTROL_PATTERN = /\x1b\[(?:>?\d*c|\?u|>q|\?\d+\$p)/g
-  private static readonly VIEWPORT_CONTROL_PATTERN = /\x1b\[[0-9;?]*[ABCDHJKSTfhlsu]/g
-  private static readonly DEC_CURSOR_PATTERN = /\x1b[78]/g
+  private static readonly STATUS_GROUPS = [
+    { status: 'running', label: 'Working' },
+    { status: 'idle', label: 'Waiting' },
+    { status: 'done', label: 'Complete' },
+    { status: 'error', label: 'Failed' },
+  ] as const
 
   private screen: Widgets.Screen
   private manager: SessionManager
   private onSessionCreated?: (session: SessionManager['selectedSession']) => void
   private listBox: Widgets.ListElement
-  private detailTerminal: TerminalWidget
-  private inputBar: Widgets.TextboxElement
   private promptOpen = false
-  private detailSessionId: string | null = null
 
   constructor(
     screen: Widgets.Screen,
@@ -40,8 +29,8 @@ export class OverviewUI {
       parent: screen,
       top: 0,
       left: 0,
-      width: '25%',
-      height: '100%-3',
+      width: '100%',
+      height: '100%',
       border: { type: 'line' },
       label: ' AGENTS ',
       style: {
@@ -52,80 +41,40 @@ export class OverviewUI {
       mouse: true,
     })
 
-    this.detailTerminal = this.createDetailTerminal()
-
-    this.inputBar = blessed.textbox({
-      parent: screen,
-      bottom: 0,
-      left: 0,
-      width: '100%',
-      height: 3,
-      border: { type: 'line' },
-      label: ' INPUT ',
-      style: { border: { fg: 'yellow' }, focus: { border: { fg: 'white' } } },
-      inputOnFocus: true,
-    })
-
     this.bindKeys()
     this.syncList()
 
-    manager.on('data', (sessionId: string, chunk: string) => {
+    manager.on('data', (sessionId: string) => {
       if (sessionId !== this.manager.selectedSession?.id) {
         return
       }
-      this.ensureDetailSession()
-      this.detailTerminal.write(this.sanitizeOverviewOutput(chunk))
+      this.syncList()
       screen.render()
     })
 
     manager.on('exit', () => {
       this.syncList()
-      this.refreshDetail()
       screen.render()
     })
-  }
 
-  private createDetailTerminal(): TerminalWidget {
-    return blessed.terminal({
-      parent: this.screen,
-      top: 0,
-      left: '25%',
-      width: '75%',
-      height: '100%-3',
-      border: { type: 'line' },
-      label: ' DETAIL ',
-      cursor: 'block',
-      cursorBlink: false,
-      screenKeys: false,
-      handler: () => {},
-      style: { border: { fg: 'cyan' } },
-    }) as unknown as TerminalWidget
+    manager.on('status', () => {
+      this.syncList()
+      screen.render()
+    })
   }
 
   private bindKeys(): void {
     this.listBox.key(['up', 'k'], () => {
       if (this.manager.sessions.length === 0) return
-      const idx = Math.max(0, this.manager.selectedIndex - 1)
-      this.manager.selectSession(idx)
-      this.listBox.select(idx)
-      this.refreshDetail()
+      this.moveSelection(-1)
+      this.syncList()
       this.screen.render()
     })
 
     this.listBox.key(['down', 'j'], () => {
       if (this.manager.sessions.length === 0) return
-      const idx = Math.min(
-        this.manager.sessions.length - 1,
-        this.manager.selectedIndex + 1
-      )
-      this.manager.selectSession(idx)
-      this.listBox.select(idx)
-      this.refreshDetail()
-      this.screen.render()
-    })
-
-    this.listBox.key('tab', () => {
-      this.inputBar.focus()
+      this.moveSelection(1)
+      this.syncList()
       this.screen.render()
     })
 
@@ -138,25 +87,8 @@ export class OverviewUI {
       if (session) {
         this.manager.removeSession(session.id)
         this.syncList()
-        this.refreshDetail()
         this.screen.render()
       }
-    })
-
-    this.inputBar.key('enter', () => {
-      const text = this.inputBar.getValue()
-      if (text) {
-        this.manager.selectedSession?.write(text + '\r')
-        this.inputBar.clearValue()
-      }
-      this.inputBar.cancel()
-      this.listBox.focus()
-      this.screen.render()
-    })
-
-    this.inputBar.on('cancel', () => {
-      this.listBox.focus()
-      this.screen.render()
     })
   }
 
@@ -212,7 +144,6 @@ export class OverviewUI {
 
       this.manager.selectSession(this.manager.sessions.length - 1)
       this.syncList()
-      this.refreshDetail()
       this.onSessionCreated?.(session)
     })
 
@@ -246,98 +177,96 @@ export class OverviewUI {
   }
 
   private syncList(): void {
-    const items = this.manager.sessions.map((s) => {
-      const statusIcon =
-        s.status === 'running' ? '⣾'
-        : s.status === 'idle'    ? '○'
-        : s.status === 'done'    ? '✓'
-        : '✗'
-      return ` ${statusIcon} ${s.id}`
-    })
+    const orderedSessions = this.getOrderedSessions()
+
+    const items: string[] = []
+    const selectedId = this.manager.selectedSession?.id
+    let selectedDisplayIndex = -1
+
+    for (const group of OverviewUI.STATUS_GROUPS) {
+      const sessions = orderedSessions.filter((session) => session.status === group.status)
+      if (sessions.length === 0) continue
+
+      items.push(` ${group.label}`)
+      for (const session of sessions) {
+        const statusIcon =
+          session.status === 'running' ? '⣾'
+          : session.status === 'idle'    ? '○'
+          : session.status === 'done'    ? '✓'
+          : '✗'
+        items.push(` ${statusIcon} ${session.id}  ${this.getStatusLabel(session.status)}`)
+        if (session.id === selectedId) {
+          selectedDisplayIndex = items.length - 1
+        }
+      }
+    }
+
     this.listBox.setItems(items)
-    if (this.manager.selectedIndex >= 0) {
-      this.listBox.select(this.manager.selectedIndex)
+    if (selectedDisplayIndex >= 0) {
+      this.listBox.select(selectedDisplayIndex)
     }
   }
 
-  private setDetailLabel(): void {
-    const session = this.manager.selectedSession
-    if (!session) {
-      this.detailTerminal.setLabel(' DETAIL ')
-      return
-    }
-
-    this.detailTerminal.setLabel(` DETAIL ${session.id} ${session.status} `)
+  private getOrderedSessions(): SessionManager['sessions'] {
+    return [...this.manager.sessions].sort((a, b) => {
+      const rankDiff = this.getStatusRank(a.status) - this.getStatusRank(b.status)
+      if (rankDiff !== 0) return rankDiff
+      return a.id.localeCompare(b.id)
+    })
   }
 
-  private rebuildDetailTerminal(): void {
-    this.detailTerminal.destroy()
-    this.detailTerminal = this.createDetailTerminal()
-  }
+  private moveSelection(direction: -1 | 1): void {
+    const orderedSessions = this.getOrderedSessions()
+    const selectedId = this.manager.selectedSession?.id
+    const currentIndex = selectedId
+      ? orderedSessions.findIndex((session) => session.id === selectedId)
+      : -1
+    const nextIndex = currentIndex === -1
+      ? 0
+      : Math.max(0, Math.min(orderedSessions.length - 1, currentIndex + direction))
+    const nextSession = orderedSessions[nextIndex]
+    if (!nextSession) return
 
-  private getDetailViewportSize(): { cols: number; rows: number } {
-    const screenWidth = Number(this.screen.width) || 80
-    const screenHeight = Number(this.screen.height) || 24
-    const listWidth = Math.floor(screenWidth * OverviewUI.LIST_WIDTH_RATIO)
-    const detailWidth = Math.max(1, screenWidth - listWidth)
-    const detailHeight = Math.max(1, screenHeight - OverviewUI.INPUT_BAR_HEIGHT)
-
-    return {
-      cols: Math.max(1, detailWidth - OverviewUI.BORDER_SIZE),
-      rows: Math.max(1, detailHeight - OverviewUI.BORDER_SIZE),
+    const managerIndex = this.manager.sessions.findIndex((session) => session.id === nextSession.id)
+    if (managerIndex >= 0) {
+      this.manager.selectSession(managerIndex)
     }
   }
 
-  private resizeSessionToDetail(session: SessionManager['selectedSession']): void {
-    if (!session || typeof session.resize !== 'function') {
-      return
+  private getStatusLabel(status: string): string {
+    switch (status) {
+      case 'running':
+        return 'working'
+      case 'idle':
+        return 'waiting'
+      case 'done':
+        return 'complete'
+      case 'error':
+        return 'failed'
+      default:
+        return status
     }
-
-    const { cols, rows } = this.getDetailViewportSize()
-    session.resize(cols, rows)
   }
 
-  private sanitizeOverviewOutput(output: string): string {
-    return output
-      .replace(OverviewUI.OSC_SEQUENCE_PATTERN, '')
-      .replace(OverviewUI.ALT_SCREEN_PATTERN, '')
-      .replace(OverviewUI.DEVICE_CONTROL_PATTERN, '')
-      .replace(OverviewUI.VIEWPORT_CONTROL_PATTERN, '')
-      .replace(OverviewUI.DEC_CURSOR_PATTERN, '')
-  }
-
-  private ensureDetailSession(): void {
-    const selectedId = this.manager.selectedSession?.id ?? null
-    if (this.detailSessionId === selectedId) {
-      this.setDetailLabel()
-      return
+  private getStatusRank(status: string): number {
+    switch (status) {
+      case 'running':
+        return 0
+      case 'idle':
+        return 1
+      case 'done':
+        return 2
+      case 'error':
+        return 3
+      default:
+        return 99
     }
-    this.refreshDetail()
-  }
-
-  private refreshDetail(): void {
-    this.rebuildDetailTerminal()
-    this.detailSessionId = this.manager.selectedSession?.id ?? null
-    this.setDetailLabel()
-
-    const session = this.manager.selectedSession
-    this.resizeSessionToDetail(session)
-    if (!session) {
-      this.detailTerminal.write('No agents running.\r\n\r\nPress "n" to add a session.\r\n')
-      return
-    }
-
-    const safeLog = this.sanitizeOverviewOutput(session.logBuffer.join(''))
-    this.detailTerminal.write(safeLog)
   }
 
   show(): void {
     this.listBox.show()
-    this.detailTerminal.show()
-    this.inputBar.show()
     this.listBox.focus()
     this.syncList()
-    this.refreshDetail()
     this.screen.render()
   }
 
@@ -346,12 +275,10 @@ export class OverviewUI {
   }
 
   resizeSelectedSession(): void {
-    this.resizeSessionToDetail(this.manager.selectedSession)
+    this.syncList()
   }
 
   hide(): void {
     this.listBox.hide()
-    this.detailTerminal.hide()
-    this.inputBar.hide()
   }
 }

@@ -2,24 +2,22 @@
 
 複数のAI coding assistant CLI（claude-code, codex, gemini-cli, copilot等）を1つのターミナルウィンドウで管理するラッパーCLIツールです。
 
-```
-┌── AGENTS ──────────────┬── DETAIL claude-code#1 running ──────────────────┐
-│ ⣾ claude-code#1       │ > fix the login redirect bug                      │
-│ ✓ codex#1             │ Reading auth.ts...                                │
-│ ○ gemini-cli#1        │ Found issue at line 42                            │
-│                       │ Running pnpm test                                 │
-│                       │                                                   │
-│                       │                                                   │
-│                       │                                                   │
-├────────────────────────┴──────────────────────────────────────────────────┤
-│ INPUT                                                                    │
-└───────────────────────────────────────────────────────────────────────────┘
+```text
+┌── AGENTS ────────────────────────────────────────────────────────────────┐
+│ Working                                                                 │
+│ ⣾ claude-code#1  working                                               │
+│ ⣾ codex#1        working                                               │
+│ Waiting                                                                 │
+│ ○ gemini-cli#1   waiting                                               │
+│ Complete                                                                │
+│ ✓ copilot#1      complete                                              │
+└──────────────────────────────────────────────────────────────────────────┘
 ```
 
 ## 特徴
 
 - 複数AIエージェントのセッションを1画面で俯瞰
-- 左でセッションを選び、右でそのエージェントの出力詳細をライブ確認
+- Overview は `Working / Waiting / Complete / Failed` の見出し付き一覧で進捗を把握
 - `→` / `Enter` で選択中エージェントをフルスクリーン表示
 - YAMLで起動エージェントを自由に定義
 - APIキー不要（既存のCLIツールをそのまま使用）
@@ -97,12 +95,11 @@ agents:
 | `↑` `↓` | Overview | セッションリストを移動 |
 | `→` / `Enter` | Overview | 選択セッションをフルスクリーン表示 |
 | `Ctrl+]` | Detail | Overview に戻る |
-| `Tab` | Overview | 入力バーにフォーカス |
 | `n` | Overview | 新規セッションを追加 |
 | `d` | Overview | 選択セッションを終了・削除 |
 | `q` / `Ctrl+C` | Overview | mav を終了（全セッションも終了） |
 
-> **Note:** Detailモードでは `←` を含むキー入力はそのままエージェントに送られます。Overview へ戻るときは `Ctrl+]` を使ってください。
+> **Note:** Overview は進捗確認用の一覧です。入力や完全な画面操作は Detail モードで行います。Detail モードでは `←` を含むキー入力はそのままエージェントに送られるため、Overview へ戻るときは `Ctrl+]` を使ってください。
 
 ## 動作要件
 
