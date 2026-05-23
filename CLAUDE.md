@@ -99,9 +99,26 @@ PTY.onData(chunk)
 - `pnpm-workspace.yaml` の `minimumReleaseAge: 10080`（7日）は変更しない
 - ネイティブビルドが必要なパッケージは `package.json` の `pnpm.onlyBuiltDependencies` に追加する
 
+## ロックファイル管理
+
+このプロジェクトは2つのロックファイルを持つ：
+
+- `pnpm-lock.yaml` — 開発用（pnpm が管理）
+- `package-lock.json` — Homebrew formula の `npm ci` 用
+
+**依存関係を追加・更新したら必ず両方を更新すること：**
+
+```bash
+pnpm add <pkg>          # pnpm-lock.yaml を更新
+npm install --package-lock-only --ignore-scripts  # package-lock.json を更新
+```
+
+`package-lock.json` を更新しないと Homebrew インストールが古いバージョンを使う。
+
 ## リリース手順
 
 1. `package.json` のバージョンを更新
-2. `git tag v<version>`
-3. `git push origin main --tags`
-4. GitHub Actions が自動でリリースを作成し `Formula/mav.rb` の SHA256を更新する
+2. 依存関係変更があれば `package-lock.json` も更新（↑参照）
+3. `git tag v<version>`
+4. `git push origin main --tags`
+5. GitHub Actions が自動でリリースを作成し `Formula/mav.rb` の SHA256を更新する

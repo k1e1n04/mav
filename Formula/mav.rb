@@ -9,7 +9,7 @@ class Mav < Formula
   depends_on "node"
 
   def install
-    system "npm", "install"
+    system "npm", "ci"
     system "npm", "run", "build"
     system "npm", "prune", "--omit=dev"
 
