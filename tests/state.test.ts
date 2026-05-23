@@ -11,6 +11,7 @@ function makeManager(sessions: Array<{
   status: string
   sessionId?: string
   displayName?: string
+  cwd?: string
   type?: string
   cmd?: string
   baseArgs?: string[]
@@ -113,6 +114,15 @@ describe('saveState / loadState', () => {
     saveState(statePath, manager)
     const state = loadState(statePath)
     expect(state?.sessions['claude-code#1']?.displayName).toBe('fix the login bug')
+  })
+
+  it('cwdをstateに保存して復元できる', () => {
+    const manager = makeManager([
+      { id: 'claude-code#1', logBuffer: [], status: 'idle', cwd: '/home/user/project-a' },
+    ])
+    saveState(statePath, manager)
+    const state = loadState(statePath)
+    expect(state?.sessions['claude-code#1']?.cwd).toBe('/home/user/project-a')
   })
 
   it('agentBase（type/cmd/args）をstateに保存して復元できる', () => {

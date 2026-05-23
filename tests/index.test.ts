@@ -152,6 +152,21 @@ describe('start', () => {
       )
     })
 
+    it('再起動時に保存済みcwdがあればそのcwdでセッションを起動する', () => {
+      loadConfigMock.mockReturnValue({
+        agents: [{ type: 'claude-code', cmd: 'claude', args: [] }],
+      })
+      loadStateMock.mockReturnValue({
+        sessions: { 'claude-code#1': { logBuffer: [], status: 'idle', sessionId: 'prev-uuid-123', cwd: '/home/user/project-a' } },
+      })
+
+      start()
+
+      expect(managerAddSessionMock).toHaveBeenCalledWith(
+        expect.objectContaining({ cwd: '/home/user/project-a' })
+      )
+    })
+
     it('stateはあるがsessionIdがない場合も --session-id <uuid> で起動する', () => {
       loadConfigMock.mockReturnValue({
         agents: [{ type: 'claude-code', cmd: 'claude', args: [] }],
@@ -413,6 +428,32 @@ describe('start', () => {
       start()
 
       expect(managerAddSessionMock).toHaveBeenCalledTimes(1)
+    })
+
+    it('state-onlyセッションに保存済みcwdがあればそのcwdで再作成する', () => {
+      loadConfigMock.mockReturnValue({
+        agents: [{ type: 'claude-code', cmd: 'claude', args: [] }],
+      })
+      managerAddSessionMock
+        .mockReturnValueOnce({ id: 'claude-code#1', logBuffer: [], status: 'idle' as const })
+        .mockReturnValueOnce({ id: 'codex#1', logBuffer: [], status: 'idle' as const })
+      loadStateMock.mockReturnValue({
+        sessions: {
+          'claude-code#1': { logBuffer: [], status: 'idle' },
+          'codex#1': {
+            logBuffer: [],
+            status: 'idle',
+            cwd: '/home/user/project-a',
+            agentBase: { type: 'codex', cmd: 'codex', args: [] },
+          },
+        },
+      })
+
+      start()
+
+      expect(managerAddSessionMock).toHaveBeenCalledWith(
+        expect.objectContaining({ type: 'codex', cwd: '/home/user/project-a' })
+      )
     })
 
     it('state-onlyセッションのcodexは resume --last で起動する', () => {

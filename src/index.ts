@@ -63,7 +63,12 @@ export function start(options: StartOptions = {}): SessionManager {
       savedSession != null,
     )
 
-    const session = manager.addSession({ ...agentConfig, args }) as AgentSession & { sessionId?: string }
+    const restoredCwd = savedSession?.cwd
+    const session = manager.addSession({
+      ...agentConfig,
+      args,
+      ...(restoredCwd != null && { cwd: restoredCwd }),
+    }) as AgentSession & { sessionId?: string }
     session.baseArgs = agentConfig.args
     configSessionIds.add(session.id)
 
@@ -84,7 +89,12 @@ export function start(options: StartOptions = {}): SessionManager {
         savedSession.sessionId,
         true,
       )
-      const session = manager.addSession({ type: rc.type, cmd: rc.cmd, args }) as AgentSession & { sessionId?: string }
+      const session = manager.addSession({
+        type: rc.type,
+        cmd: rc.cmd,
+        args,
+        ...(savedSession.cwd != null && { cwd: savedSession.cwd }),
+      }) as AgentSession & { sessionId?: string }
       session.baseArgs = rc.args
       if (newSessionId != null) {
         session.sessionId = newSessionId
