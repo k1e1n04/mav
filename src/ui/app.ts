@@ -1,4 +1,5 @@
-import * as blessed from 'neo-blessed'
+import blessed from 'neo-blessed'
+import type { Widgets } from 'neo-blessed'
 import type { SessionManager } from '../session-manager.js'
 import { OverviewUI } from './overview.js'
 import { DetailUI } from './detail.js'
@@ -6,7 +7,7 @@ import { DetailUI } from './detail.js'
 type Mode = 'overview' | 'detail'
 
 export class App {
-  private screen: blessed.Widgets.Screen
+  private screen: Widgets.Screen
   private manager: SessionManager
   private overviewUI: OverviewUI
   private detailUI: DetailUI
@@ -29,6 +30,9 @@ export class App {
     this.screen.on('resize', () => {
       const cols = this.screen.width as number
       const rows = this.screen.height as number
+      for (const session of this.manager.sessions) {
+        session.resize(cols, rows)
+      }
       if (this.mode === 'detail') {
         this.detailUI.resize(cols, rows)
       }
@@ -36,10 +40,20 @@ export class App {
   }
 
   private bindGlobalKeys(): void {
-    this.screen.key(['q', 'C-c'], () => {
+    // q always quits; C-c quits only in overview — in detail mode it forwards to the PTY
+    this.screen.key('q', () => {
       this.manager.killAll()
       this.screen.destroy()
       process.exit(0)
+    })
+
+    this.screen.key('C-c', () => {
+      if (this.mode === 'overview') {
+        this.manager.killAll()
+        this.screen.destroy()
+        process.exit(0)
+      }
+      // detail mode: falls through to keypress handler which forwards \x03 to PTY
     })
 
     this.screen.key(['right', 'enter'], () => {
@@ -80,6 +94,11 @@ export class App {
   }
 
   start(): void {
+    const cols = this.screen.width as number
+    const rows = this.screen.height as number
+    for (const session of this.manager.sessions) {
+      session.resize(cols, rows)
+    }
     this.overviewUI.show()
     this.screen.render()
   }

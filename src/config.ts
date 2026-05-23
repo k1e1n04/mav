@@ -34,14 +34,18 @@ export function loadConfig(configPath: string): MavConfig {
     return DEFAULT_CONFIG
   }
 
-  const agents: AgentConfig[] = parsed.agents.map((a) => {
-    const defaults = DEFAULT_CMDS[a.type] ?? { cmd: a.type, args: [] }
-    return {
-      type: a.type,
-      cmd: a.cmd ?? defaults.cmd,
-      args: a.args ?? defaults.args,
-    }
-  })
+  const agents: AgentConfig[] = parsed.agents
+    .filter((a): a is { type: string; cmd?: string; args?: string[] } =>
+      typeof a?.type === 'string' && a.type.length > 0
+    )
+    .map((a) => {
+      const defaults = DEFAULT_CMDS[a.type] ?? { cmd: a.type, args: [] }
+      return {
+        type: a.type,
+        cmd: a.cmd ?? defaults.cmd,
+        args: a.args ?? defaults.args,
+      }
+    })
 
   return { agents }
 }

@@ -1,14 +1,15 @@
-import * as blessed from 'neo-blessed'
+import blessed from 'neo-blessed'
+import type { Widgets } from 'neo-blessed'
 import type { AgentSession } from '../agent.js'
 
 export class DetailUI {
-  private screen: blessed.Widgets.Screen
-  private headerBox: blessed.Widgets.BoxElement
-  private contentBox: blessed.Widgets.BoxElement
+  private screen: Widgets.Screen
+  private headerBox: Widgets.BoxElement
+  private contentBox: Widgets.BoxElement
   private currentSession: AgentSession | null = null
   private dataListener: ((data: string) => void) | null = null
 
-  constructor(screen: blessed.Widgets.Screen) {
+  constructor(screen: Widgets.Screen) {
     this.screen = screen
 
     this.headerBox = blessed.box({

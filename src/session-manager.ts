@@ -2,20 +2,25 @@ import { EventEmitter } from 'node:events'
 import { AgentSession } from './agent.js'
 import type { AgentConfig } from './config.js'
 
+type SessionListeners = {
+  onData: (chunk: string) => void
+  onExit: (code: number) => void
+}
+
 export class SessionManager extends EventEmitter {
   sessions: AgentSession[] = []
   selectedIndex: number = -1
+  private sessionListeners = new Map<string, SessionListeners>()
 
   addSession(config: AgentConfig, cols = 80, rows = 24): AgentSession {
     const session = new AgentSession(config, cols, rows)
 
-    session.on('data', (chunk: string) => {
-      this.emit('data', session.id, chunk)
-    })
+    const onData = (chunk: string) => { this.emit('data', session.id, chunk) }
+    const onExit = (code: number) => { this.emit('exit', session.id, code) }
 
-    session.on('exit', (code: number) => {
-      this.emit('exit', session.id, code)
-    })
+    session.on('data', onData)
+    session.on('exit', onExit)
+    this.sessionListeners.set(session.id, { onData, onExit })
 
     this.sessions.push(session)
 
@@ -30,7 +35,14 @@ export class SessionManager extends EventEmitter {
     const idx = this.sessions.findIndex((s) => s.id === id)
     if (idx === -1) return
 
-    this.sessions[idx]!.kill()
+    const session = this.sessions[idx]!
+    const ls = this.sessionListeners.get(id)
+    if (ls) {
+      session.off('data', ls.onData)
+      session.off('exit', ls.onExit)
+      this.sessionListeners.delete(id)
+    }
+    session.kill()
     this.sessions.splice(idx, 1)
 
     if (this.sessions.length === 0) {
@@ -52,9 +64,15 @@ export class SessionManager extends EventEmitter {
 
   killAll(): void {
     for (const session of this.sessions) {
+      const ls = this.sessionListeners.get(session.id)
+      if (ls) {
+        session.off('data', ls.onData)
+        session.off('exit', ls.onExit)
+      }
       session.kill()
     }
     this.sessions = []
+    this.sessionListeners.clear()
     this.selectedIndex = -1
   }
 }

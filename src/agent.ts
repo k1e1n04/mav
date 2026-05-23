@@ -13,7 +13,7 @@ export class AgentSession extends EventEmitter {
   logBuffer: string[] = []
   lastPrompt: string = ''
 
-  private ptyProcess: pty.IPty
+  private ptyProcess: pty.IPty | undefined
 
   constructor(config: AgentConfig, cols: number, rows: number) {
     super()
@@ -21,12 +21,23 @@ export class AgentSession extends EventEmitter {
     this.id = `${config.type}#${counters[config.type]}`
     this.type = config.type
 
-    this.ptyProcess = pty.spawn(config.cmd, config.args, {
-      name: 'xterm-256color',
-      cols,
-      rows,
-      env: process.env as Record<string, string>,
-    })
+    let proc: pty.IPty
+    try {
+      proc = pty.spawn(config.cmd, config.args, {
+        name: 'xterm-256color',
+        cols,
+        rows,
+        env: process.env as Record<string, string>,
+      })
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      this.status = 'error'
+      this.logBuffer.push(`Error: failed to spawn '${config.cmd}': ${msg}\r\n`)
+      process.nextTick(() => this.emit('exit', 1))
+      return
+    }
+
+    this.ptyProcess = proc
 
     this.ptyProcess.onData((data) => {
       this.appendLog(data)
@@ -40,15 +51,15 @@ export class AgentSession extends EventEmitter {
   }
 
   write(data: string): void {
-    this.ptyProcess.write(data)
+    this.ptyProcess?.write(data)
   }
 
   kill(): void {
-    this.ptyProcess.kill()
+    this.ptyProcess?.kill()
   }
 
   resize(cols: number, rows: number): void {
-    this.ptyProcess.resize(cols, rows)
+    this.ptyProcess?.resize(cols, rows)
   }
 
   private appendLog(chunk: string): void {

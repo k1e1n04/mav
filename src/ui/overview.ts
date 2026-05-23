@@ -1,14 +1,16 @@
-import * as blessed from 'neo-blessed'
+import blessed from 'neo-blessed'
+import type { Widgets } from 'neo-blessed'
 import type { SessionManager } from '../session-manager.js'
 
 export class OverviewUI {
-  private screen: blessed.Widgets.Screen
+  private screen: Widgets.Screen
   private manager: SessionManager
-  private listBox: blessed.Widgets.ListElement
-  private logBox: blessed.Widgets.BoxElement
-  private inputBar: blessed.Widgets.TextboxElement
+  private listBox: Widgets.ListElement
+  private logBox: Widgets.BoxElement
+  private inputBar: Widgets.TextboxElement
+  private promptOpen = false
 
-  constructor(screen: blessed.Widgets.Screen, manager: SessionManager) {
+  constructor(screen: Widgets.Screen, manager: SessionManager) {
     this.screen = screen
     this.manager = manager
 
@@ -71,6 +73,7 @@ export class OverviewUI {
 
   private bindKeys(): void {
     this.listBox.key(['up', 'k'], () => {
+      if (this.manager.sessions.length === 0) return
       const idx = Math.max(0, this.manager.selectedIndex - 1)
       this.manager.selectSession(idx)
       this.listBox.select(idx)
@@ -78,6 +81,7 @@ export class OverviewUI {
     })
 
     this.listBox.key(['down', 'j'], () => {
+      if (this.manager.sessions.length === 0) return
       const idx = Math.min(
         this.manager.sessions.length - 1,
         this.manager.selectedIndex + 1
@@ -124,6 +128,9 @@ export class OverviewUI {
   }
 
   private showAddPrompt(): void {
+    if (this.promptOpen) return
+    this.promptOpen = true
+
     const agentTypes = ['claude-code', 'codex', 'gemini-cli', 'copilot']
 
     const prompt = blessed.list({
@@ -142,10 +149,17 @@ export class OverviewUI {
       },
     })
 
+    const close = () => {
+      this.promptOpen = false
+      prompt.destroy()
+      this.listBox.focus()
+      this.screen.render()
+    }
+
     prompt.key('enter', () => {
       const selectedIdx = (prompt as unknown as { selected: number }).selected ?? 0
       const selected = agentTypes[selectedIdx]!
-      prompt.destroy()
+      close()
 
       const defaults: Record<string, { cmd: string; args: string[] }> = {
         'claude-code': { cmd: 'claude', args: [] },
@@ -156,15 +170,9 @@ export class OverviewUI {
       const d = defaults[selected] ?? { cmd: selected, args: [] }
       this.manager.addSession({ type: selected, cmd: d.cmd, args: d.args })
       this.syncList()
-      this.listBox.focus()
-      this.screen.render()
     })
 
-    prompt.key('escape', () => {
-      prompt.destroy()
-      this.listBox.focus()
-      this.screen.render()
-    })
+    prompt.key('escape', close)
 
     prompt.focus()
     this.screen.render()
@@ -173,7 +181,10 @@ export class OverviewUI {
   private syncList(): void {
     const items = this.manager.sessions.map((s) => {
       const statusIcon =
-        s.status === 'running' ? '⣾' : s.status === 'done' ? '✓' : '✗'
+        s.status === 'running' ? '⣾'
+        : s.status === 'idle'    ? '○'
+        : s.status === 'done'    ? '✓'
+        : '✗'
       return ` ${statusIcon} ${s.id}`
     })
     this.listBox.setItems(items)
