@@ -87,4 +87,25 @@ describe('loadConfig', () => {
     const config = loadConfig(join(TMP, 'config.yaml'))
     expect(config.agents[0].resumeArgs).toBeUndefined()
   })
+
+  it('cwdをYAMLから読み込める', () => {
+    const yaml = `agents:\n  - type: claude-code\n    cwd: /tmp/myproject\n`
+    writeFileSync(join(TMP, 'config.yaml'), yaml)
+    const config = loadConfig(join(TMP, 'config.yaml'))
+    expect(config.agents[0].cwd).toBe('/tmp/myproject')
+  })
+
+  it('cwdの ~ をHOMEディレクトリに展開する', () => {
+    const yaml = `agents:\n  - type: claude-code\n    cwd: ~/projects/foo\n`
+    writeFileSync(join(TMP, 'config.yaml'), yaml)
+    const config = loadConfig(join(TMP, 'config.yaml'))
+    expect(config.agents[0].cwd).toBe(`${process.env.HOME}/projects/foo`)
+  })
+
+  it('cwdを指定しない場合はundefinedになる', () => {
+    const yaml = `agents:\n  - type: claude-code\n`
+    writeFileSync(join(TMP, 'config.yaml'), yaml)
+    const config = loadConfig(join(TMP, 'config.yaml'))
+    expect(config.agents[0].cwd).toBeUndefined()
+  })
 })

@@ -31,7 +31,7 @@ export function loadConfig(configPath: string): MavConfig {
   }
 
   const agents: AgentConfig[] = parsed.agents
-    .filter((a): a is { type: string; cmd?: string; args?: string[]; resumeArgs?: string[] } =>
+    .filter((a): a is { type: string; cmd?: string; args?: string[]; cwd?: string; resumeArgs?: string[] } =>
       typeof a?.type === 'string' && a.type.length > 0
     )
     .map((a) => {
@@ -39,10 +39,14 @@ export function loadConfig(configPath: string): MavConfig {
       const cmd = typeof a.cmd === 'string' && a.cmd.trim().length > 0
         ? a.cmd
         : defaults.cmd
+      const cwd = typeof a.cwd === 'string' && a.cwd.trim().length > 0
+        ? a.cwd.replace(/^~/, process.env.HOME ?? '~')
+        : undefined
       return {
         type: a.type,
         cmd,
         args: Array.isArray(a.args) ? a.args : defaults.args,
+        cwd,
         resumeArgs: Array.isArray(a.resumeArgs) ? a.resumeArgs : defaults.resumeArgs,
       }
     })

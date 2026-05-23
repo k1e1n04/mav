@@ -43,6 +43,9 @@ class MockWidget extends EventEmitter {
   getValue(): string {
     return this.value
   }
+  setValue(v: string): void {
+    this.value = v
+  }
   clearValue(): void {
     this.value = ''
   }
@@ -65,20 +68,34 @@ vi.mock('neo-blessed', () => ({
       widgets.createdLists.push(widget)
       return widget
     }),
+    box: vi.fn(() => {
+      const widget = new MockWidget()
+      widgets.createdLists.push(widget)
+      return widget
+    }),
   },
 }))
 
 import { OverviewUI } from '../src/ui/overview.js'
+
+function makeScreen(extra: Record<string, unknown> = {}) {
+  return Object.assign(new EventEmitter(), { render: vi.fn(), key: vi.fn(), unkey: vi.fn(), ...extra })
+}
+
+async function pressEnter(screen: EventEmitter) {
+  await new Promise<void>((resolve) => setImmediate(resolve))
+  screen.emit('keypress', '', { name: 'enter' })
+}
 
 describe('OverviewUI', () => {
   beforeEach(() => {
     widgets.createdLists.length = 0
   })
 
-  it('n で追加したセッションを選択状態にする', () => {
+  it('n で追加したセッションを選択状態にする', async () => {
     const initialSession = { id: 'claude-code#1', displayName: 'claude-code 1', status: 'running', logBuffer: [], write: vi.fn() }
     const addedSession = { id: 'codex#1', displayName: 'codex 1', status: 'running', logBuffer: [], write: vi.fn() }
-    const screen = { render: vi.fn() }
+    const screen = makeScreen()
     const manager = Object.assign(new EventEmitter(), {
       sessions: [initialSession],
       selectedIndex: 0,
@@ -104,13 +121,15 @@ describe('OverviewUI', () => {
     prompt!.selected = 1
     prompt!.handlers.get('enter')?.()
 
+    await pressEnter(screen)
+
     expect(manager.selectedIndex).toBe(1)
     expect(manager.selectedSession).toBe(addedSession)
-    expect(listBox.selected).toBe(2)
+    expect(listBox.selected).toBe(3)
   })
 
   it('一覧リストは blessed tags を有効にして描画する', () => {
-    const screen = { render: vi.fn() }
+    const screen = makeScreen()
     const manager = Object.assign(new EventEmitter(), {
       sessions: [],
       selectedIndex: -1,
@@ -126,11 +145,11 @@ describe('OverviewUI', () => {
     expect(listBox.tags).toBe(true)
   })
 
-  it('一覧カーソルが selectedSession とずれていても n で追加した新規セッションを選択する', () => {
+  it('一覧カーソルが selectedSession とずれていても n で追加した新規セッションを選択する', async () => {
     const firstSession = { id: 'claude-code#1', displayName: 'claude-code 1', status: 'running', logBuffer: [], write: vi.fn() }
     const secondSession = { id: 'codex#1', displayName: 'codex 1', status: 'running', logBuffer: [], write: vi.fn() }
     const addedSession = { id: 'gemini-cli#1', displayName: 'gemini-cli 1', status: 'running', logBuffer: [], write: vi.fn() }
-    const screen = { render: vi.fn() }
+    const screen = makeScreen()
     const manager = Object.assign(new EventEmitter(), {
       sessions: [firstSession, secondSession],
       selectedIndex: 0,
@@ -157,16 +176,18 @@ describe('OverviewUI', () => {
     prompt!.selected = 2
     prompt!.handlers.get('enter')?.()
 
+    await pressEnter(screen)
+
     expect(manager.selectedIndex).toBe(2)
     expect(manager.selectedSession).toBe(addedSession)
-    expect(listBox.selected).toBe(3)
+    expect(listBox.selected).toBe(4)
   })
 
-  it('n でモデル選択後に新規セッションへの遷移コールバックを呼ぶ', () => {
+  it('n でモデル選択後に新規セッションへの遷移コールバックを呼ぶ', async () => {
     const initialSession = { id: 'claude-code#1', displayName: 'claude-code 1', status: 'running', logBuffer: [], write: vi.fn() }
     const addedSession = { id: 'codex#1', displayName: 'codex 1', status: 'running', logBuffer: [], write: vi.fn() }
     const onSessionCreated = vi.fn()
-    const screen = { render: vi.fn() }
+    const screen = makeScreen()
     const manager = Object.assign(new EventEmitter(), {
       sessions: [initialSession],
       selectedIndex: 0,
@@ -191,13 +212,15 @@ describe('OverviewUI', () => {
     prompt.selected = 1
     prompt.handlers.get('enter')?.()
 
+    await pressEnter(screen)
+
     expect(onSessionCreated).toHaveBeenCalledWith(addedSession)
   })
 
-  it('copilot選択時は copilot コマンドでセッションを起動する', () => {
+  it('copilot選択時は copilot コマンドでセッションを起動する', async () => {
     const initialSession = { id: 'claude-code#1', displayName: 'claude-code 1', status: 'running', logBuffer: [], write: vi.fn() }
     const addedSession = { id: 'copilot#1', displayName: 'copilot 1', status: 'running', logBuffer: [], write: vi.fn() }
-    const screen = { render: vi.fn() }
+    const screen = makeScreen()
     const manager = Object.assign(new EventEmitter(), {
       sessions: [initialSession],
       selectedIndex: 0,
@@ -222,6 +245,8 @@ describe('OverviewUI', () => {
     prompt.selected = 3
     prompt.handlers.get('enter')?.()
 
+    await pressEnter(screen)
+
     expect(manager.addSession).toHaveBeenCalledWith({
       type: 'copilot',
       cmd: 'copilot',
@@ -230,10 +255,10 @@ describe('OverviewUI', () => {
     })
   })
 
-  it('claude-code選択時は新規session-id付きでセッションを起動する', () => {
+  it('claude-code選択時は新規session-id付きでセッションを起動する', async () => {
     const initialSession = { id: 'claude-code#1', displayName: 'claude-code 1', status: 'running', logBuffer: [], write: vi.fn() }
     const addedSession = { id: 'claude-code#2', displayName: 'claude-code 2', status: 'running', logBuffer: [], write: vi.fn() }
-    const screen = { render: vi.fn() }
+    const screen = makeScreen()
     const manager = Object.assign(new EventEmitter(), {
       sessions: [initialSession],
       selectedIndex: 0,
@@ -258,6 +283,8 @@ describe('OverviewUI', () => {
     prompt.selected = 0
     prompt.handlers.get('enter')?.()
 
+    await pressEnter(screen)
+
     expect(manager.addSession).toHaveBeenCalledWith({
       type: 'claude-code',
       cmd: 'claude',
@@ -266,10 +293,10 @@ describe('OverviewUI', () => {
     })
   })
 
-  it('n で追加したセッションは process.cwd() を cwd として起動する', () => {
+  it('n で追加したセッションは process.cwd() を cwd として起動する', async () => {
     const initialSession = { id: 'claude-code#1', displayName: 'claude-code 1', status: 'running', logBuffer: [], write: vi.fn() }
     const addedSession = { id: 'codex#1', displayName: 'codex 1', status: 'running', logBuffer: [], write: vi.fn(), cwd: '/tmp/project-a' }
-    const screen = { render: vi.fn() }
+    const screen = makeScreen()
     const manager = Object.assign(new EventEmitter(), {
       sessions: [initialSession],
       selectedIndex: 0,
@@ -294,6 +321,8 @@ describe('OverviewUI', () => {
     const prompt = widgets.createdLists[1]!
     prompt.selected = 1
     prompt.handlers.get('enter')?.()
+
+    await pressEnter(screen)
 
     expect(manager.addSession).toHaveBeenCalledWith({
       type: 'codex',
@@ -338,7 +367,7 @@ describe('OverviewUI', () => {
       logBuffer: ['failed\r\n'],
       write: vi.fn(),
     }
-    const screen = { render: vi.fn(), width: 80 }
+    const screen = makeScreen({ width: 80 })
     const manager = Object.assign(new EventEmitter(), {
       sessions: [firstSession, secondSession, thirdSession, fourthSession],
       selectedIndex: 0,
@@ -355,20 +384,21 @@ describe('OverviewUI', () => {
     ui.show()
 
     const listBox = widgets.createdLists[0]!
-    expect(listBox.items).toHaveLength(8)
-    expect(listBox.items[0]).toContain('Working')
-    expect(listBox.items[1]).toContain('{cyan-fg}⣾ codex 1 (codex)  working{/cyan-fg}')
-    expect(listBox.items[1]).toContain('working')
-    expect(listBox.items[2]).toContain('Waiting')
-    expect(listBox.items[3]).toContain('{yellow-fg}○ gemini-cli 1 (gemini-cli)  waiting{/yellow-fg}')
-    expect(listBox.items[3]).toContain('waiting')
-    expect(listBox.items[4]).toContain('Complete')
-    expect(listBox.items[5]).toContain('{green-fg}✓ fix recording bug (codex)  complete{/green-fg}')
-    expect(listBox.items[5]).toContain('complete')
-    expect(listBox.items[6]).toContain('Failed')
-    expect(listBox.items[7]).toContain('{red-fg}✗ copilot 1 (copilot)  failed{/red-fg}')
-    expect(listBox.items[7]).toContain('failed')
-    expect(listBox.selected).toBe(5)
+    expect(listBox.items).toHaveLength(9)
+    expect(listBox.items[0]).toMatch(/bold/)  // cwd header
+    expect(listBox.items[1]).toContain('Working')
+    expect(listBox.items[2]).toContain('{cyan-fg}⣾ codex 1 (codex)  working{/cyan-fg}')
+    expect(listBox.items[2]).toContain('working')
+    expect(listBox.items[3]).toContain('Waiting')
+    expect(listBox.items[4]).toContain('{yellow-fg}○ gemini-cli 1 (gemini-cli)  waiting{/yellow-fg}')
+    expect(listBox.items[4]).toContain('waiting')
+    expect(listBox.items[5]).toContain('Complete')
+    expect(listBox.items[6]).toContain('{green-fg}✓ fix recording bug (codex)  complete{/green-fg}')
+    expect(listBox.items[6]).toContain('complete')
+    expect(listBox.items[7]).toContain('Failed')
+    expect(listBox.items[8]).toContain('{red-fg}✗ copilot 1 (copilot)  failed{/red-fg}')
+    expect(listBox.items[8]).toContain('failed')
+    expect(listBox.selected).toBe(6)
   })
 
   it('一覧の状態ラベルはログ内容に引きずられない', () => {
@@ -378,7 +408,7 @@ describe('OverviewUI', () => {
       logBuffer: ['\u001b[2mfoo\u001b[0m bar\r\n'],
       write: vi.fn(),
     }
-    const screen = { render: vi.fn() }
+    const screen = makeScreen()
     const manager = Object.assign(new EventEmitter(), {
       sessions: [session],
       selectedIndex: 0,
@@ -395,8 +425,8 @@ describe('OverviewUI', () => {
     ui.show()
 
     const listBox = widgets.createdLists[0]!
-    expect(listBox.items[1]).toContain('working')
-    expect(listBox.items[1]).not.toContain('foo bar')
+    expect(listBox.items[2]).toContain('working')
+    expect(listBox.items[2]).not.toContain('foo bar')
   })
 
   it('一覧の状態ラベルは全画面UI向け制御シーケンスの影響を受けない', () => {
@@ -413,7 +443,7 @@ describe('OverviewUI', () => {
       ],
       write: vi.fn(),
     }
-    const screen = { render: vi.fn() }
+    const screen = makeScreen()
     const manager = Object.assign(new EventEmitter(), {
       sessions: [session],
       selectedIndex: 0,
@@ -430,8 +460,8 @@ describe('OverviewUI', () => {
     ui.show()
 
     const listBox = widgets.createdLists[0]!
-    expect(listBox.items[1]).toContain('working')
-    expect(listBox.items[1]).not.toContain('foobar')
+    expect(listBox.items[2]).toContain('working')
+    expect(listBox.items[2]).not.toContain('foobar')
   })
 
   it('一覧の状態ラベルはライブ出力ではなく状態変化で更新する', () => {
@@ -441,7 +471,7 @@ describe('OverviewUI', () => {
       logBuffer: [],
       write: vi.fn(),
     }
-    const screen = { render: vi.fn() }
+    const screen = makeScreen()
     const manager = Object.assign(new EventEmitter(), {
       sessions: [session],
       selectedIndex: 0,
@@ -461,8 +491,8 @@ describe('OverviewUI', () => {
     manager.emit('data', session.id, '\x1b[H\x1b[2J\x1b[2mfoo\x1b[0m\x1b[1;1Hbar')
 
     const listBox = widgets.createdLists[0]!
-    expect(listBox.items[1]).toContain('working')
-    expect(listBox.items[1]).not.toContain('foobar')
+    expect(listBox.items[2]).toContain('working')
+    expect(listBox.items[2]).not.toContain('foobar')
   })
 
   it('一覧の状態ラベルはstatusイベントでwaitingへ更新する', () => {
@@ -472,7 +502,7 @@ describe('OverviewUI', () => {
       logBuffer: [],
       write: vi.fn(),
     }
-    const screen = { render: vi.fn(), width: 80 }
+    const screen = makeScreen({ width: 80 })
     const manager = Object.assign(new EventEmitter(), {
       sessions: [session],
       selectedIndex: 0,
@@ -492,14 +522,14 @@ describe('OverviewUI', () => {
     manager.emit('status', session.id, 'idle')
 
     const listBox = widgets.createdLists[0]!
-    expect(listBox.items[0]).toContain('Waiting')
-    expect(listBox.items[1]).toContain('waiting')
+    expect(listBox.items[1]).toContain('Waiting')
+    expect(listBox.items[2]).toContain('waiting')
   })
 
   it('下キーで見出しをまたいで次のセッションへ移動できる', () => {
     const firstSession = { id: 'claude-code#1', status: 'running', logBuffer: [], write: vi.fn() }
     const secondSession = { id: 'codex#1', status: 'idle', logBuffer: [], write: vi.fn() }
-    const screen = { render: vi.fn() }
+    const screen = makeScreen()
     const manager = Object.assign(new EventEmitter(), {
       sessions: [firstSession, secondSession],
       selectedIndex: 0,
@@ -518,13 +548,13 @@ describe('OverviewUI', () => {
     listBox.handlers.get('down')?.()
 
     expect(manager.selectedSession).toBe(secondSession)
-    expect(listBox.selected).toBe(3)
+    expect(listBox.selected).toBe(4)
   })
 
   it('上キーで見出しをまたいで前のセッションへ移動できる', () => {
     const firstSession = { id: 'claude-code#1', status: 'running', logBuffer: [], write: vi.fn() }
     const secondSession = { id: 'codex#1', status: 'idle', logBuffer: [], write: vi.fn() }
-    const screen = { render: vi.fn() }
+    const screen = makeScreen()
     const manager = Object.assign(new EventEmitter(), {
       sessions: [firstSession, secondSession],
       selectedIndex: 1,
@@ -543,14 +573,14 @@ describe('OverviewUI', () => {
     listBox.handlers.get('up')?.()
 
     expect(manager.selectedSession).toBe(firstSession)
-    expect(listBox.selected).toBe(1)
+    expect(listBox.selected).toBe(2)
   })
 
   it('表示順と内部順が違っても下キーで表示上の次へ移動する', () => {
     const completeSession = { id: 'claude-code#1', status: 'done', logBuffer: [], write: vi.fn() }
     const workingSession = { id: 'codex#1', status: 'running', logBuffer: [], write: vi.fn() }
     const waitingSession = { id: 'gemini-cli#1', status: 'idle', logBuffer: [], write: vi.fn() }
-    const screen = { render: vi.fn() }
+    const screen = makeScreen()
     const manager = Object.assign(new EventEmitter(), {
       sessions: [completeSession, workingSession, waitingSession],
       selectedIndex: 1,
@@ -569,14 +599,14 @@ describe('OverviewUI', () => {
     listBox.handlers.get('down')?.()
 
     expect(manager.selectedSession).toBe(waitingSession)
-    expect(listBox.selected).toBe(3)
+    expect(listBox.selected).toBe(4)
   })
 
   it('表示順と内部順が違っても上キーで表示上の前へ移動する', () => {
     const completeSession = { id: 'claude-code#1', status: 'done', logBuffer: [], write: vi.fn() }
     const workingSession = { id: 'codex#1', status: 'running', logBuffer: [], write: vi.fn() }
     const waitingSession = { id: 'gemini-cli#1', status: 'idle', logBuffer: [], write: vi.fn() }
-    const screen = { render: vi.fn() }
+    const screen = makeScreen()
     const manager = Object.assign(new EventEmitter(), {
       sessions: [completeSession, workingSession, waitingSession],
       selectedIndex: 0,
@@ -595,6 +625,6 @@ describe('OverviewUI', () => {
     listBox.handlers.get('up')?.()
 
     expect(manager.selectedSession).toBe(waitingSession)
-    expect(listBox.selected).toBe(3)
+    expect(listBox.selected).toBe(4)
   })
 })
