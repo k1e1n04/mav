@@ -176,6 +176,15 @@ describe('SessionManager', () => {
     expect(handler).toHaveBeenCalledWith(session.id, 'idle')
   })
 
+  it('cwd変化時にcwdイベントが発火される', () => {
+    const handler = vi.fn()
+    manager.on('cwd', handler)
+    manager.addSession({ type: 'claude-code', cmd: 'claude', args: [] })
+    const session = manager.sessions[0]!
+    session.emit('cwd', '/tmp/worktrees/feature-a')
+    expect(handler).toHaveBeenCalledWith(session.id, '/tmp/worktrees/feature-a')
+  })
+
   describe('restoreLogBuffers', () => {
     it('保存済みlogBufferをセッションに適用する', () => {
       manager.addSession({ type: 'claude-code', cmd: 'claude', args: [] })

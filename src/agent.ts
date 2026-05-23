@@ -1,6 +1,7 @@
 import { EventEmitter } from 'node:events'
 import * as pty from 'node-pty'
 import type { AgentConfig } from './config.js'
+import { getProcessCwd } from './process-cwd.js'
 
 export type SessionStatus = 'running' | 'idle' | 'done' | 'error'
 
@@ -10,11 +11,12 @@ export class AgentSession extends EventEmitter {
   private static readonly IDLE_TIMEOUT_MS = 1500
   private static readonly DISPLAY_NAME_MAX_LENGTH = 25
   private static readonly DISPLAY_NAME_MIN_LENGTH = 3
+  private static readonly CWD_POLL_INTERVAL_MS = 1000
 
   readonly id: string
   readonly type: string
   readonly cmd: string
-  readonly cwd: string
+  cwd: string
   displayName: string
   baseArgs: string[] = []
   status: SessionStatus = 'running'
@@ -25,6 +27,7 @@ export class AgentSession extends EventEmitter {
   private ptyProcess: pty.IPty | undefined
   private exited = false
   private idleTimer: ReturnType<typeof setTimeout> | null = null
+  private cwdPollTimer: ReturnType<typeof setInterval> | null = null
   private displayNameLocked = false
   private initialInputBuffer = ''
 
@@ -57,6 +60,7 @@ export class AgentSession extends EventEmitter {
     this.ptyProcess = proc
 
     this.ptyProcess.onData((data) => {
+      this.updateCwdFromOutput(data)
       this.appendLog(data)
       this.setStatus('running')
       this.scheduleIdleTimer()
@@ -65,11 +69,14 @@ export class AgentSession extends EventEmitter {
 
     this.ptyProcess.onExit(({ exitCode }) => {
       this.clearIdleTimer()
+      this.clearCwdPollTimer()
       this.setStatus(exitCode === 0 ? 'done' : 'error')
       this.exited = true
       this.ptyProcess = undefined
       this.emit('exit', exitCode)
     })
+
+    this.startCwdPolling()
   }
 
   /** 保存されたdisplayNameを復元し、以降の入力で上書きされないようにロックする */
@@ -88,6 +95,7 @@ export class AgentSession extends EventEmitter {
   kill(): void {
     if (this.exited) return
     this.clearIdleTimer()
+    this.clearCwdPollTimer()
     this.ptyProcess?.kill()
   }
 
@@ -129,6 +137,29 @@ export class AgentSession extends EventEmitter {
     this.idleTimer = null
   }
 
+  private startCwdPolling(): void {
+    if (this.cwdPollTimer || !this.ptyProcess) {
+      return
+    }
+
+    this.cwdPollTimer = setInterval(() => {
+      if (this.exited || !this.ptyProcess) {
+        return
+      }
+
+      this.updateCwd(getProcessCwd(this.ptyProcess.pid))
+    }, AgentSession.CWD_POLL_INTERVAL_MS)
+  }
+
+  private clearCwdPollTimer(): void {
+    if (!this.cwdPollTimer) {
+      return
+    }
+
+    clearInterval(this.cwdPollTimer)
+    this.cwdPollTimer = null
+  }
+
   private updateDisplayNameFromInput(data: string): void {
     if (this.displayNameLocked) {
       return
@@ -157,6 +188,38 @@ export class AgentSession extends EventEmitter {
 
     this.displayName = normalized
     this.emit('name', normalized)
+  }
+
+  private updateCwdFromOutput(data: string): void {
+    this.updateCwd(AgentSession.extractOsc7Cwd(data))
+  }
+
+  private updateCwd(nextCwd: string | null): void {
+    if (!nextCwd || nextCwd === this.cwd) {
+      return
+    }
+
+    this.cwd = nextCwd
+    this.emit('cwd', nextCwd)
+  }
+
+  private static extractOsc7Cwd(data: string): string | null {
+    const matches = [...data.matchAll(/\x1b\]7;([^\x07\x1b]+)(?:\x07|\x1b\\)/g)]
+    const rawUrl = matches.at(-1)?.[1]
+    if (!rawUrl) {
+      return null
+    }
+
+    try {
+      const url = new URL(rawUrl)
+      if (url.protocol !== 'file:') {
+        return null
+      }
+
+      return decodeURIComponent(url.pathname || '')
+    } catch {
+      return null
+    }
   }
 
   private static normalizeDisplayName(input: string): string {

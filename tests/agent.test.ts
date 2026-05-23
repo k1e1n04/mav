@@ -15,6 +15,14 @@ vi.mock('node-pty', () => {
   }
 })
 
+const { getProcessCwdMock } = vi.hoisted(() => ({
+  getProcessCwdMock: vi.fn(),
+}))
+
+vi.mock('../src/process-cwd.js', () => ({
+  getProcessCwd: getProcessCwdMock,
+}))
+
 import * as nodePty from 'node-pty'
 import { AgentSession } from '../src/agent.js'
 
@@ -28,6 +36,7 @@ describe('AgentSession', () => {
   beforeEach(() => {
     vi.useFakeTimers()
     vi.clearAllMocks()
+    getProcessCwdMock.mockReturnValue(null)
     getMockPty().onData.mockImplementation((cb: (data: string) => void) => { onDataCb = cb })
     getMockPty().onExit.mockImplementation((cb: (e: { exitCode: number }) => void) => { onExitCb = cb })
     session = new AgentSession({ type: 'claude-code', cmd: 'claude', args: [] }, 80, 24)
@@ -163,6 +172,54 @@ describe('AgentSession', () => {
     session.on('data', handler)
     onDataCb?.('chunk')
     expect(handler).toHaveBeenCalledWith('chunk')
+  })
+
+  it('OSC 7 の current directory シーケンスを受信すると cwd を更新する', () => {
+    const handler = vi.fn()
+    session.on('cwd', handler)
+
+    onDataCb?.('\x1b]7;file:///tmp/worktrees/feature-a\x07')
+
+    expect(session.cwd).toBe('/tmp/worktrees/feature-a')
+    expect(handler).toHaveBeenCalledWith('/tmp/worktrees/feature-a')
+  })
+
+  it('OSC 7 で percent-encoded path を受信すると decode して cwd を更新する', () => {
+    onDataCb?.('\x1b]7;file:///tmp/worktrees/feature%20a\x07')
+
+    expect(session.cwd).toBe('/tmp/worktrees/feature a')
+  })
+
+  it('OSC 7 が不正な URL の場合は cwd を更新しない', () => {
+    const originalCwd = session.cwd
+    const handler = vi.fn()
+    session.on('cwd', handler)
+
+    onDataCb?.('\x1b]7;not-a-file-url\x07')
+
+    expect(session.cwd).toBe(originalCwd)
+    expect(handler).not.toHaveBeenCalled()
+  })
+
+  it('child process の live cwd を poll して更新する', () => {
+    const handler = vi.fn()
+    session.on('cwd', handler)
+    getProcessCwdMock.mockReturnValue('/tmp/worktrees/live-a')
+
+    vi.advanceTimersByTime(1000)
+
+    expect(session.cwd).toBe('/tmp/worktrees/live-a')
+    expect(handler).toHaveBeenCalledWith('/tmp/worktrees/live-a')
+  })
+
+  it('poll した cwd が変わらなければ cwd イベントを発火しない', () => {
+    const handler = vi.fn()
+    session.on('cwd', handler)
+    getProcessCwdMock.mockReturnValue(session.cwd)
+
+    vi.advanceTimersByTime(1000)
+
+    expect(handler).not.toHaveBeenCalled()
   })
 
   it('一定時間出力が止まるとstatus=idleになる', () => {

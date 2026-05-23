@@ -134,6 +134,13 @@ export function start(options: StartOptions = {}): SessionManager {
     publishSelectedSession()
   })
 
+  manager.on('cwd', (sessionId: string) => {
+    if (manager.selectedSession?.id !== sessionId) {
+      return
+    }
+    publishSelectedSession()
+  })
+
   publishSelectedSession()
 
   // q/Ctrl+C 以外の終了（ウィンドウ閉じ等）でも state を保存する

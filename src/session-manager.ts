@@ -8,6 +8,7 @@ type SessionListeners = {
   onExit: (code: number) => void
   onStatus: (status: string) => void
   onName: (name: string) => void
+  onCwd: (cwd: string) => void
 }
 
 export class SessionManager extends EventEmitter {
@@ -26,12 +27,14 @@ export class SessionManager extends EventEmitter {
     const onExit = (code: number) => { this.emit('exit', session.id, code) }
     const onStatus = (status: string) => { this.emit('status', session.id, status) }
     const onName = (name: string) => { this.emit('name', session.id, name) }
+    const onCwd = (cwd: string) => { this.emit('cwd', session.id, cwd) }
 
     session.on('data', onData)
     session.on('exit', onExit)
     session.on('status', onStatus)
     session.on('name', onName)
-    this.sessionListeners.set(session.id, { onData, onExit, onStatus, onName })
+    session.on('cwd', onCwd)
+    this.sessionListeners.set(session.id, { onData, onExit, onStatus, onName, onCwd })
 
     this.sessions.push(session)
 
@@ -54,6 +57,7 @@ export class SessionManager extends EventEmitter {
       session.off('exit', ls.onExit)
       session.off('status', ls.onStatus)
       session.off('name', ls.onName)
+      session.off('cwd', ls.onCwd)
       this.sessionListeners.delete(id)
     }
     session.kill()
@@ -104,6 +108,7 @@ export class SessionManager extends EventEmitter {
         session.off('exit', ls.onExit)
         session.off('status', ls.onStatus)
         session.off('name', ls.onName)
+        session.off('cwd', ls.onCwd)
       }
       session.kill()
     }

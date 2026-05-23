@@ -48,6 +48,16 @@ vi.mock('../src/session-manager.js', () => ({
       this.selectedSession = session
       this.emit('selection', session)
     }
+    emitCwd(sessionId: string, cwd: string) {
+      const session = (this.sessions as Array<{ id?: string; cwd?: string }>).find((item) => item?.id === sessionId)
+      if (session) {
+        session.cwd = cwd
+        if (this.selectedSession === session) {
+          this.selectedSession = { ...session }
+        }
+      }
+      this.emit('cwd', sessionId, cwd)
+    }
   },
 }))
 
@@ -325,6 +335,34 @@ describe('start', () => {
         type: 'claude-code',
         displayName: 'fix bug',
         cwd: '/tmp/project-b',
+      }),
+    )
+  })
+
+  it('選択中セッションの cwd 更新で current-session.json を更新する', () => {
+    loadConfigMock.mockReturnValue({
+      agents: [{ type: 'codex', cmd: 'codex', args: [] }],
+    })
+    const createdSession = {
+      id: 'codex#1',
+      type: 'codex',
+      displayName: 'codex 1',
+      cwd: '/tmp/project-a',
+      logBuffer: [],
+      status: 'idle',
+    }
+    managerAddSessionMock.mockReturnValue(createdSession)
+
+    const manager = start() as unknown as { emitCwd: (sessionId: string, cwd: string) => void }
+    manager.emitCwd('codex#1', '/tmp/worktrees/feature-a')
+
+    expect(saveCurrentSessionStateMock).toHaveBeenLastCalledWith(
+      expect.any(String),
+      expect.objectContaining({
+        id: 'codex#1',
+        type: 'codex',
+        displayName: 'codex 1',
+        cwd: '/tmp/worktrees/feature-a',
       }),
     )
   })
