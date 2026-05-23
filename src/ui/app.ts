@@ -83,6 +83,7 @@ export class App {
     this.mode = 'detail'
     this.overviewUI.hide()
     this.screen.program.normalBuffer()
+    this.screen.program.disableMouse()
     this.screen.realloc()
     this.detailUI.attach(session)
     this.detailUI.show()
@@ -93,6 +94,7 @@ export class App {
     this.detailUI.detach()
     this.detailUI.hide()
     this.screen.program.alternateBuffer()
+    this.screen.program.enableMouse()
     this.screen.realloc()
     this.overviewUI.show()
   }

@@ -35,6 +35,8 @@ const {
     screenState: {
       current: null as {
         program: {
+          disableMouse: ReturnType<typeof vi.fn>
+          enableMouse: ReturnType<typeof vi.fn>
           normalBuffer: ReturnType<typeof vi.fn>
           alternateBuffer: ReturnType<typeof vi.fn>
         }
@@ -68,6 +70,8 @@ vi.mock('neo-blessed', () => ({
         render: screenRenderMock,
         destroy: screenDestroyMock,
         program: {
+          disableMouse: vi.fn(),
+          enableMouse: vi.fn(),
           normalBuffer: vi.fn(),
           alternateBuffer: vi.fn(),
         },
@@ -158,6 +162,21 @@ describe('App', () => {
     expect(screenState.current?.program.normalBuffer).toHaveBeenCalledTimes(1)
   })
 
+  it('overviewからdetailへ入る時はmouse trackingを無効化する', () => {
+    const selectedSession = { id: 'claude-code#1', resize: vi.fn() }
+    const manager = {
+      sessions: [selectedSession],
+      selectedSession,
+      killAll: killAllMock,
+    }
+
+    new App(manager as never)
+
+    screenKeyHandlers.get('enter')?.()
+
+    expect(screenState.current?.program.disableMouse).toHaveBeenCalledTimes(1)
+  })
+
   it('detailでCtrl+]相当の終了コールバックが走るとoverviewに戻る', () => {
     const selectedSession = { id: 'claude-code#1', resize: vi.fn() }
     const manager = {
@@ -173,6 +192,7 @@ describe('App', () => {
 
     expect(detailDetachMock).toHaveBeenCalledTimes(1)
     expect(detailHideMock).toHaveBeenCalledTimes(1)
+    expect(screenState.current?.program.enableMouse).toHaveBeenCalledTimes(1)
     expect(overviewShowMock).toHaveBeenCalledTimes(1)
   })
 

@@ -2,11 +2,18 @@ import type { Widgets } from 'neo-blessed'
 import type { AgentSession } from '../agent.js'
 
 export class DetailUI {
+  private static readonly EXIT_SEQUENCES = [
+    '\x1d',
+    '\x1b[93;5u',
+    '\x1b[27;5;93~',
+  ] as const
+
   private screen: Widgets.Screen
   private onExitDetail: () => void
   private currentSession: AgentSession | null = null
   private dataListener: ((data: string) => void) | null = null
   private rawInputListener: ((chunk: unknown) => void) | null = null
+  private pendingInput = ''
 
   constructor(screen: Widgets.Screen, onExitDetail: () => void) {
     this.screen = screen
@@ -14,16 +21,19 @@ export class DetailUI {
   }
 
   private isExitShortcut(input: string): boolean {
-    return (
-      input === '\x1d' ||
-      input === '\x1b[93;5u' ||
-      input === '\x1b[27;5;93~'
+    return DetailUI.EXIT_SEQUENCES.includes(
+      input as (typeof DetailUI.EXIT_SEQUENCES)[number]
     )
+  }
+
+  private isExitShortcutPrefix(input: string): boolean {
+    return DetailUI.EXIT_SEQUENCES.some((sequence) => sequence.startsWith(input))
   }
 
   attach(session: AgentSession): void {
     this.detach()
     this.currentSession = session
+    this.pendingInput = ''
 
     const { input, output } = this.screen.program
 
@@ -51,7 +61,20 @@ export class DetailUI {
         this.onExitDetail()
         return
       }
-      this.currentSession?.write(str)
+      this.pendingInput += str
+
+      if (this.isExitShortcut(this.pendingInput)) {
+        this.pendingInput = ''
+        this.onExitDetail()
+        return
+      }
+
+      if (this.isExitShortcutPrefix(this.pendingInput)) {
+        return
+      }
+
+      this.currentSession?.write(this.pendingInput)
+      this.pendingInput = ''
     }
     input.on('data', this.rawInputListener)
   }
@@ -65,6 +88,7 @@ export class DetailUI {
       this.screen.program.input.removeListener('data', this.rawInputListener)
       this.rawInputListener = null
     }
+    this.pendingInput = ''
     this.currentSession = null
   }
 

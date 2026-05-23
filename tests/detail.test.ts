@@ -75,4 +75,26 @@ describe('DetailUI', () => {
     expect(onExitDetail).toHaveBeenCalledTimes(1)
     expect(session.write).not.toHaveBeenCalledWith('\x1b[27;5;93~')
   })
+
+  it('詳細モードでは分割されたkitty keyboardのCtrl+]でもoverviewへ戻る', () => {
+    ui.attach(session as never)
+
+    input.emit('data', '\x1b[93;')
+    input.emit('data', '5u')
+
+    expect(onExitDetail).toHaveBeenCalledTimes(1)
+    expect(session.write).not.toHaveBeenCalledWith('\x1b[93;')
+    expect(session.write).not.toHaveBeenCalledWith('5u')
+  })
+
+  it('詳細モードでは分割されたmodifyOtherKeys形式のCtrl+]でもoverviewへ戻る', () => {
+    ui.attach(session as never)
+
+    input.emit('data', '\x1b[27;5;')
+    input.emit('data', '93~')
+
+    expect(onExitDetail).toHaveBeenCalledTimes(1)
+    expect(session.write).not.toHaveBeenCalledWith('\x1b[27;5;')
+    expect(session.write).not.toHaveBeenCalledWith('93~')
+  })
 })
