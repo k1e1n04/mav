@@ -168,13 +168,44 @@ export class OverviewUI {
         'copilot': { cmd: 'gh', args: ['copilot', 'suggest'] },
       }
       const d = defaults[selected] ?? { cmd: selected, args: [] }
-      this.manager.addSession({ type: selected, cmd: d.cmd, args: d.args })
+      const session = this.manager.addSession({ type: selected, cmd: d.cmd, args: d.args })
+
+      if (session.status === 'error') {
+        this.manager.removeSession(session.id)
+        this.showError(`'${d.cmd}' command not found.\nIs ${selected} installed?`)
+        this.syncList()
+        return
+      }
+
       this.syncList()
     })
 
     prompt.key('escape', close)
 
     prompt.focus()
+    this.screen.render()
+  }
+
+  private showError(message: string): void {
+    const overlay = blessed.box({
+      parent: this.screen,
+      top: 'center',
+      left: 'center',
+      width: 50,
+      height: message.split('\n').length + 4,
+      border: { type: 'line' },
+      label: ' Error ',
+      content: `\n ${message.split('\n').join('\n ')}`,
+      style: { border: { fg: 'red' }, label: { fg: 'red' } },
+      keys: true,
+      mouse: true,
+    })
+    overlay.key(['enter', 'escape', 'q'], () => {
+      overlay.destroy()
+      this.listBox.focus()
+      this.screen.render()
+    })
+    overlay.focus()
     this.screen.render()
   }
 
