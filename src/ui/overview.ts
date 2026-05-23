@@ -120,8 +120,7 @@ export class OverviewUI {
       this.screen.render()
     })
 
-    this.inputBar.key('escape', () => {
-      this.inputBar.cancel()
+    this.inputBar.on('cancel', () => {
       this.listBox.focus()
       this.screen.render()
     })
@@ -229,7 +228,11 @@ export class OverviewUI {
     for (const session of this.manager.sessions) {
       const recent = session.logBuffer.slice(-20)
       for (const chunk of recent) {
-        const stripped = chunk.replace(/\x1b\[[0-9;]*[mGKHF]/g, '')
+        // Strip CSI, OSC, and two-char escape sequences
+        const stripped = chunk
+          .replace(/\x1b\[[\x30-\x3f]*[\x20-\x2f]*[\x40-\x7e]/g, '')
+          .replace(/\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)/g, '')
+          .replace(/\x1b[A-Za-z]/g, '')
         lines.push(`{cyan-fg}[${session.id}]{/cyan-fg} ${stripped}`)
       }
     }

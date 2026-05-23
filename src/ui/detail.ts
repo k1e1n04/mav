@@ -1,105 +1,71 @@
-import blessed from 'neo-blessed'
 import type { Widgets } from 'neo-blessed'
 import type { AgentSession } from '../agent.js'
 
 export class DetailUI {
   private screen: Widgets.Screen
-  private headerBox: Widgets.BoxElement
-  private contentBox: Widgets.BoxElement
   private currentSession: AgentSession | null = null
   private dataListener: ((data: string) => void) | null = null
+  private rawInputListener: ((chunk: unknown) => void) | null = null
 
   constructor(screen: Widgets.Screen) {
     this.screen = screen
-
-    this.headerBox = blessed.box({
-      parent: screen,
-      top: 0,
-      left: 0,
-      width: '100%',
-      height: 1,
-      style: { bg: 'blue', fg: 'white', bold: true },
-      tags: true,
-    })
-
-    this.contentBox = blessed.box({
-      parent: screen,
-      top: 1,
-      left: 0,
-      width: '100%',
-      height: (screen.height as number) - 1,
-      scrollable: true,
-      alwaysScroll: true,
-      tags: false,
-    })
   }
 
   attach(session: AgentSession): void {
-    if (this.currentSession && this.dataListener) {
-      this.currentSession.off('data', this.dataListener)
-    }
-
+    this.detach()
     this.currentSession = session
-    this.contentBox.setContent('')
 
-    const buf = session.logBuffer.join('')
-    this.contentBox.setContent(buf)
-    this.contentBox.setScrollPerc(100)
+    const { input, output } = this.screen.program
+
+    // Replay log buffer directly to the physical terminal.
+    // Filter alternate-buffer switch sequences so we stay in blessed's alt buffer.
+    const safeLog = session.logBuffer
+      .join('')
+      .replace(/\x1b\[\?104[79][hl]|\x1b\[\?47[hl]/g, '')
+    output.write('\x1b[?1l')    // Normal cursor key mode (← sends \x1b[D)
+    output.write('\x1b[H\x1b[2J')
+    output.write(safeLog)
 
     this.dataListener = (data: string) => {
-      this.contentBox.pushLine(data)
-      this.contentBox.setScrollPerc(100)
-      this.screen.render()
+      output.write(data)
     }
     session.on('data', this.dataListener)
 
-    this.headerBox.setContent(
-      ` mav — {bold}${session.id}{/bold}  {grey-fg}[← to back]{/grey-fg} `
-    )
-
-    this.screen.render()
+    // Forward raw stdin bytes to PTY, bypassing blessed's key processing
+    this.rawInputListener = (chunk: unknown) => {
+      const str = Buffer.isBuffer(chunk)
+        ? chunk.toString('utf8')
+        : typeof chunk === 'string'
+          ? chunk
+          : ''
+      if (!str) return
+      // ← in normal (\x1b[D) and application (\x1bOD) cursor key modes
+      if (str === '\x1b[D' || str === '\x1bOD') return
+      if (str === '\x02') {    // C-b → cursor left (since ← is taken for "go back")
+        this.currentSession?.write('\x1b[D')
+        return
+      }
+      this.currentSession?.write(str)
+    }
+    input.on('data', this.rawInputListener)
   }
 
   detach(): void {
     if (this.currentSession && this.dataListener) {
       this.currentSession.off('data', this.dataListener)
+      this.dataListener = null
+    }
+    if (this.rawInputListener) {
+      this.screen.program.input.removeListener('data', this.rawInputListener)
+      this.rawInputListener = null
     }
     this.currentSession = null
-    this.dataListener = null
   }
 
-  forwardKey(keyName: string, ch: string): void {
-    if (!this.currentSession) return
-
-    if (keyName === 'return') {
-      this.currentSession.write('\r')
-    } else if (keyName === 'backspace') {
-      this.currentSession.write('\x7f')
-    } else if (keyName === 'C-c') {
-      this.currentSession.write('\x03')
-    } else if (keyName === 'C-d') {
-      this.currentSession.write('\x04')
-    } else if (keyName === 'C-b') {
-      // ← の代替（カーソル左移動）
-      this.currentSession.write('\x1b[D')
-    } else if (ch) {
-      this.currentSession.write(ch)
-    }
-  }
+  show(): void {}
+  hide(): void {}
 
   resize(cols: number, rows: number): void {
-    this.contentBox.height = rows - 1
-    this.currentSession?.resize(cols, rows - 1)
-  }
-
-  show(): void {
-    this.headerBox.show()
-    this.contentBox.show()
-    this.screen.render()
-  }
-
-  hide(): void {
-    this.headerBox.hide()
-    this.contentBox.hide()
+    this.currentSession?.resize(cols, rows)
   }
 }
