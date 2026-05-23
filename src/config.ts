@@ -5,13 +5,14 @@ export interface AgentConfig {
   type: string
   cmd: string
   args: string[]
+  resumeArgs?: string[]
 }
 
 export interface MavConfig {
   agents: AgentConfig[]
 }
 
-const DEFAULT_CMDS: Record<string, { cmd: string; args: string[] }> = {
+const DEFAULT_CMDS: Record<string, { cmd: string; args: string[]; resumeArgs?: string[] }> = {
   'claude-code': { cmd: 'claude', args: [] },
   'codex': { cmd: 'codex', args: [] },
   'gemini-cli': { cmd: 'gemini', args: [] },
@@ -35,7 +36,7 @@ export function loadConfig(configPath: string): MavConfig {
   }
 
   const agents: AgentConfig[] = parsed.agents
-    .filter((a): a is { type: string; cmd?: string; args?: string[] } =>
+    .filter((a): a is { type: string; cmd?: string; args?: string[]; resumeArgs?: string[] } =>
       typeof a?.type === 'string' && a.type.length > 0
     )
     .map((a) => {
@@ -44,6 +45,7 @@ export function loadConfig(configPath: string): MavConfig {
         type: a.type,
         cmd: a.cmd ?? defaults.cmd,
         args: Array.isArray(a.args) ? a.args : defaults.args,
+        resumeArgs: Array.isArray(a.resumeArgs) ? a.resumeArgs : defaults.resumeArgs,
       }
     })
 

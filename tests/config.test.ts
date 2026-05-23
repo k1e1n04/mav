@@ -62,4 +62,23 @@ describe('loadConfig', () => {
     const config = loadConfig(join(TMP, 'config.yaml'))
     expect(config.agents[0].args).toEqual([])
   })
+
+  it('resumeArgsをYAMLから読み込める', () => {
+    const yaml = `agents:\n  - type: claude-code\n    resumeArgs:\n      - --resume\n`
+    writeFileSync(join(TMP, 'config.yaml'), yaml)
+    const config = loadConfig(join(TMP, 'config.yaml'))
+    expect(config.agents[0].resumeArgs).toEqual(['--resume'])
+  })
+
+  it('claude-codeのデフォルトresumeArgsはundefined（自動管理するため不要）', () => {
+    const config = loadConfig(join(TMP, 'nonexistent.yaml'))
+    expect(config.agents[0].resumeArgs).toBeUndefined()
+  })
+
+  it('resumeArgsが配列でない場合はundefinedになる', () => {
+    const yaml = `agents:\n  - type: claude-code\n    resumeArgs: invalid\n`
+    writeFileSync(join(TMP, 'config.yaml'), yaml)
+    const config = loadConfig(join(TMP, 'config.yaml'))
+    expect(config.agents[0].resumeArgs).toBeUndefined()
+  })
 })

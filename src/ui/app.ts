@@ -2,6 +2,7 @@ import blessed from 'neo-blessed'
 import type { Widgets } from 'neo-blessed'
 import type { AgentSession } from '../agent.js'
 import type { SessionManager } from '../session-manager.js'
+import { saveState } from '../state.js'
 import { OverviewUI } from './overview.js'
 import { DetailUI } from './detail.js'
 
@@ -10,12 +11,14 @@ type Mode = 'overview' | 'detail'
 export class App {
   private screen: Widgets.Screen
   private manager: SessionManager
+  private statePath: string
   private overviewUI: OverviewUI
   private detailUI: DetailUI
   private mode: Mode = 'overview'
 
-  constructor(manager: SessionManager) {
+  constructor(manager: SessionManager, statePath: string) {
     this.manager = manager
+    this.statePath = statePath
 
     this.screen = blessed.screen({
       smartCSR: true,
@@ -59,6 +62,7 @@ export class App {
   private bindGlobalKeys(): void {
     this.screen.key('q', () => {
       if (this.mode === 'detail') return
+      saveState(this.statePath, this.manager)
       this.manager.killAll()
       this.screen.destroy()
       process.exit(0)
@@ -66,6 +70,7 @@ export class App {
 
     this.screen.key('C-c', () => {
       if (this.mode === 'overview') {
+        saveState(this.statePath, this.manager)
         this.manager.killAll()
         this.screen.destroy()
         process.exit(0)

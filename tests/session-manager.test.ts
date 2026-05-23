@@ -134,4 +134,45 @@ describe('SessionManager', () => {
     session.emit('status', 'idle')
     expect(handler).toHaveBeenCalledWith(session.id, 'idle')
   })
+
+  describe('restoreLogBuffers', () => {
+    it('保存済みlogBufferをセッションに適用する', () => {
+      manager.addSession({ type: 'claude-code', cmd: 'claude', args: [] })
+      const session = manager.sessions[0]!
+      manager.restoreLogBuffers({
+        sessions: { [session.id]: { logBuffer: ['restored\r\n'], status: 'idle' } },
+      })
+      expect(session.logBuffer).toEqual(['restored\r\n'])
+    })
+
+    it('stateに存在しないセッションはlogBufferが空のまま', () => {
+      manager.addSession({ type: 'claude-code', cmd: 'claude', args: [] })
+      const session = manager.sessions[0]!
+      manager.restoreLogBuffers({ sessions: {} })
+      expect(session.logBuffer).toEqual([])
+    })
+
+    it('sessionIdも復元する', () => {
+      manager.addSession({ type: 'claude-code', cmd: 'claude', args: [] })
+      const session = manager.sessions[0]!
+      manager.restoreLogBuffers({
+        sessions: { [session.id]: { logBuffer: [], status: 'idle', sessionId: 'saved-uuid' } },
+      })
+      expect((session as { sessionId?: string }).sessionId).toBe('saved-uuid')
+    })
+
+    it('複数セッションそれぞれのlogBufferを復元する', () => {
+      manager.addSession({ type: 'claude-code', cmd: 'claude', args: [] })
+      manager.addSession({ type: 'codex', cmd: 'codex', args: [] })
+      const [s1, s2] = manager.sessions as [typeof manager.sessions[0], typeof manager.sessions[0]]
+      manager.restoreLogBuffers({
+        sessions: {
+          [s1.id]: { logBuffer: ['a'], status: 'idle' },
+          [s2.id]: { logBuffer: ['b', 'c'], status: 'done' },
+        },
+      })
+      expect(s1.logBuffer).toEqual(['a'])
+      expect(s2.logBuffer).toEqual(['b', 'c'])
+    })
+  })
 })

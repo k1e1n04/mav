@@ -78,6 +78,9 @@ export class SessionManager extends EventEmitter {
       const saved = state.sessions[session.id]
       if (saved) {
         session.logBuffer = [...saved.logBuffer]
+        if (saved.sessionId != null) {
+          session.sessionId = saved.sessionId
+        }
       }
     }
   }

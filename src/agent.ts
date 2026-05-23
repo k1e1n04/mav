@@ -17,6 +17,7 @@ export class AgentSession extends EventEmitter {
   status: SessionStatus = 'running'
   logBuffer: string[] = []
   lastPrompt: string = ''
+  sessionId?: string
 
   private ptyProcess: pty.IPty | undefined
   private exited = false
