@@ -82,6 +82,8 @@ export class App {
     if (!session) return
     this.mode = 'detail'
     this.overviewUI.hide()
+    this.screen.program.normalBuffer()
+    this.screen.realloc()
     this.detailUI.attach(session)
     this.detailUI.show()
   }

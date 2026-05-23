@@ -14,6 +14,7 @@ const {
   detailAttachMock,
   detailDetachMock,
   killAllMock,
+  screenState,
   triggerExitDetail,
   setExitDetailHandler,
   overviewCtorArgs,
@@ -31,6 +32,15 @@ const {
     detailAttachMock: vi.fn(),
     detailDetachMock: vi.fn(),
     killAllMock: vi.fn(),
+    screenState: {
+      current: null as {
+        program: {
+          normalBuffer: ReturnType<typeof vi.fn>
+          alternateBuffer: ReturnType<typeof vi.fn>
+        }
+        realloc: ReturnType<typeof vi.fn>
+      } | null,
+    },
     overviewCtorArgs: [] as unknown[][],
     setExitDetailHandler: (handler: () => void) => {
       onExitDetailHandler = handler
@@ -43,24 +53,28 @@ const {
 
 vi.mock('neo-blessed', () => ({
   default: {
-    screen: vi.fn(() => ({
-      width: 120,
-      height: 40,
-      key(keys: string | string[], handler: KeyHandler) {
-        for (const key of Array.isArray(keys) ? keys : [keys]) {
-          screenKeyHandlers.set(key, handler)
-        }
-      },
-      on(event: string, handler: () => void) {
-        screenOnHandlers.set(event, handler)
-      },
-      render: screenRenderMock,
-      destroy: screenDestroyMock,
-      program: {
-        alternateBuffer: vi.fn(),
-      },
-      realloc: vi.fn(),
-    })),
+    screen: vi.fn(() => {
+      screenState.current = {
+        width: 120,
+        height: 40,
+        key(keys: string | string[], handler: KeyHandler) {
+          for (const key of Array.isArray(keys) ? keys : [keys]) {
+            screenKeyHandlers.set(key, handler)
+          }
+        },
+        on(event: string, handler: () => void) {
+          screenOnHandlers.set(event, handler)
+        },
+        render: screenRenderMock,
+        destroy: screenDestroyMock,
+        program: {
+          normalBuffer: vi.fn(),
+          alternateBuffer: vi.fn(),
+        },
+        realloc: vi.fn(),
+      } as never
+      return screenState.current
+    }),
   },
 }))
 
@@ -108,6 +122,7 @@ describe('App', () => {
     screenKeyHandlers.clear()
     screenOnHandlers.clear()
     overviewCtorArgs.length = 0
+    screenState.current = null
     vi.clearAllMocks()
   })
 
@@ -126,6 +141,21 @@ describe('App', () => {
     expect(overviewHideMock).toHaveBeenCalledTimes(1)
     expect(detailAttachMock).toHaveBeenCalledWith(selectedSession)
     expect(detailShowMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('overviewからdetailへ入る時は端末のnormal bufferへ戻す', () => {
+    const selectedSession = { id: 'claude-code#1', resize: vi.fn() }
+    const manager = {
+      sessions: [selectedSession],
+      selectedSession,
+      killAll: killAllMock,
+    }
+
+    new App(manager as never)
+
+    screenKeyHandlers.get('enter')?.()
+
+    expect(screenState.current?.program.normalBuffer).toHaveBeenCalledTimes(1)
   })
 
   it('detailでCtrl+]相当の終了コールバックが走るとoverviewに戻る', () => {
