@@ -1,0 +1,212 @@
+import * as blessed from 'neo-blessed'
+import type { SessionManager } from '../session-manager.js'
+
+export class OverviewUI {
+  private screen: blessed.Widgets.Screen
+  private manager: SessionManager
+  private listBox: blessed.Widgets.ListElement
+  private logBox: blessed.Widgets.BoxElement
+  private inputBar: blessed.Widgets.TextboxElement
+
+  constructor(screen: blessed.Widgets.Screen, manager: SessionManager) {
+    this.screen = screen
+    this.manager = manager
+
+    this.listBox = blessed.list({
+      parent: screen,
+      top: 0,
+      left: 0,
+      width: '25%',
+      height: '100%-3',
+      border: { type: 'line' },
+      label: ' AGENTS ',
+      style: {
+        selected: { bg: 'blue', fg: 'white' },
+        border: { fg: 'cyan' },
+      },
+      keys: true,
+      mouse: true,
+    })
+
+    this.logBox = blessed.box({
+      parent: screen,
+      top: 0,
+      left: '25%',
+      width: '75%',
+      height: '100%-3',
+      border: { type: 'line' },
+      label: ' LOG STREAM ',
+      scrollable: true,
+      alwaysScroll: true,
+      scrollbar: { ch: '│' },
+      style: { border: { fg: 'cyan' } },
+      tags: true,
+    })
+
+    this.inputBar = blessed.textbox({
+      parent: screen,
+      bottom: 0,
+      left: 0,
+      width: '100%',
+      height: 3,
+      border: { type: 'line' },
+      label: ' INPUT ',
+      style: { border: { fg: 'yellow' }, focus: { border: { fg: 'white' } } },
+      inputOnFocus: true,
+    })
+
+    this.bindKeys()
+    this.syncList()
+
+    manager.on('data', () => {
+      this.updateLog()
+      screen.render()
+    })
+
+    manager.on('exit', () => {
+      this.syncList()
+      screen.render()
+    })
+  }
+
+  private bindKeys(): void {
+    this.listBox.key(['up', 'k'], () => {
+      const idx = Math.max(0, this.manager.selectedIndex - 1)
+      this.manager.selectSession(idx)
+      this.listBox.select(idx)
+      this.screen.render()
+    })
+
+    this.listBox.key(['down', 'j'], () => {
+      const idx = Math.min(
+        this.manager.sessions.length - 1,
+        this.manager.selectedIndex + 1
+      )
+      this.manager.selectSession(idx)
+      this.listBox.select(idx)
+      this.screen.render()
+    })
+
+    this.listBox.key('tab', () => {
+      this.inputBar.focus()
+      this.screen.render()
+    })
+
+    this.listBox.key('n', () => {
+      this.showAddPrompt()
+    })
+
+    this.listBox.key('d', () => {
+      const session = this.manager.selectedSession
+      if (session) {
+        this.manager.removeSession(session.id)
+        this.syncList()
+        this.screen.render()
+      }
+    })
+
+    this.inputBar.key('enter', () => {
+      const text = this.inputBar.getValue()
+      if (text) {
+        this.manager.selectedSession?.write(text + '\r')
+        this.inputBar.clearValue()
+      }
+      this.inputBar.cancel()
+      this.listBox.focus()
+      this.screen.render()
+    })
+
+    this.inputBar.key('escape', () => {
+      this.inputBar.cancel()
+      this.listBox.focus()
+      this.screen.render()
+    })
+  }
+
+  private showAddPrompt(): void {
+    const agentTypes = ['claude-code', 'codex', 'gemini-cli', 'copilot']
+
+    const prompt = blessed.list({
+      parent: this.screen,
+      top: 'center',
+      left: 'center',
+      width: 40,
+      height: agentTypes.length + 4,
+      border: { type: 'line' },
+      label: ' Select agent type ',
+      items: agentTypes,
+      keys: true,
+      style: {
+        selected: { bg: 'blue', fg: 'white' },
+        border: { fg: 'green' },
+      },
+    })
+
+    prompt.key('enter', () => {
+      const selected = agentTypes[prompt.selected ?? 0]!
+      prompt.destroy()
+
+      const defaults: Record<string, { cmd: string; args: string[] }> = {
+        'claude-code': { cmd: 'claude', args: [] },
+        'codex': { cmd: 'codex', args: [] },
+        'gemini-cli': { cmd: 'gemini', args: [] },
+        'copilot': { cmd: 'gh', args: ['copilot', 'suggest'] },
+      }
+      const d = defaults[selected] ?? { cmd: selected, args: [] }
+      this.manager.addSession({ type: selected, cmd: d.cmd, args: d.args })
+      this.syncList()
+      this.listBox.focus()
+      this.screen.render()
+    })
+
+    prompt.key('escape', () => {
+      prompt.destroy()
+      this.listBox.focus()
+      this.screen.render()
+    })
+
+    prompt.focus()
+    this.screen.render()
+  }
+
+  private syncList(): void {
+    const items = this.manager.sessions.map((s) => {
+      const statusIcon =
+        s.status === 'running' ? '⣾' : s.status === 'done' ? '✓' : '✗'
+      return ` ${statusIcon} ${s.id}`
+    })
+    this.listBox.setItems(items)
+    if (this.manager.selectedIndex >= 0) {
+      this.listBox.select(this.manager.selectedIndex)
+    }
+  }
+
+  private updateLog(): void {
+    const lines: string[] = []
+    for (const session of this.manager.sessions) {
+      const recent = session.logBuffer.slice(-20)
+      for (const chunk of recent) {
+        const stripped = chunk.replace(/\x1b\[[0-9;]*[mGKHF]/g, '')
+        lines.push(`{cyan-fg}[${session.id}]{/cyan-fg} ${stripped}`)
+      }
+    }
+    this.logBox.setContent(lines.join(''))
+    this.logBox.setScrollPerc(100)
+  }
+
+  show(): void {
+    this.listBox.show()
+    this.logBox.show()
+    this.inputBar.show()
+    this.listBox.focus()
+    this.syncList()
+    this.updateLog()
+    this.screen.render()
+  }
+
+  hide(): void {
+    this.listBox.hide()
+    this.logBox.hide()
+    this.inputBar.hide()
+  }
+}
