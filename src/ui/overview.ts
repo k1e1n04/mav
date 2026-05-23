@@ -9,6 +9,12 @@ export class OverviewUI {
     { status: 'done', label: 'Complete' },
     { status: 'error', label: 'Failed' },
   ] as const
+  private static readonly STATUS_COLORS = {
+    running: 'cyan',
+    idle: 'yellow',
+    done: 'green',
+    error: 'red',
+  } as const
 
   private screen: Widgets.Screen
   private manager: SessionManager
@@ -33,6 +39,7 @@ export class OverviewUI {
       height: '100%',
       border: { type: 'line' },
       label: ' AGENTS ',
+      tags: true,
       style: {
         selected: { bg: 'blue', fg: 'white' },
         border: { fg: 'cyan' },
@@ -200,7 +207,9 @@ export class OverviewUI {
           : session.status === 'done'    ? '✓'
           : '✗'
         const sessionLabel = session.displayName ?? session.id
-        items.push(` ${statusIcon} ${sessionLabel}  ${this.getStatusLabel(session.status)}`)
+        const content = `${statusIcon} ${sessionLabel}  ${this.getStatusLabel(session.status)}`
+        const color = OverviewUI.STATUS_COLORS[session.status]
+        items.push(` {${color}-fg}${content}{/${color}-fg}`)
         if (session.id === selectedId) {
           selectedDisplayIndex = items.length - 1
         }
