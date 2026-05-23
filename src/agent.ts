@@ -132,12 +132,18 @@ export class AgentSession extends EventEmitter {
     }
 
     this.initialInputBuffer += data
-    const newlineIndex = this.initialInputBuffer.search(/\r|\n/)
+
+    // DCS/APC/PM/SOS シーケンス（Warp など一部ターミナルがstdinに送る）を除去してから
+    // ユーザー入力の改行を探す。これらのシーケンスは CR/LF を含むことがあり、
+    // そのまま処理すると表示名がターミナル固有の文字列で汚染される。
+    const cleaned = this.initialInputBuffer.replace(/\x1b[P_^X][^\x1b]*(?:\x1b\\)?/g, '')
+
+    const newlineIndex = cleaned.search(/\r|\n/)
     if (newlineIndex === -1) {
       return
     }
 
-    const firstLine = this.initialInputBuffer.slice(0, newlineIndex)
+    const firstLine = cleaned.slice(0, newlineIndex)
     this.displayNameLocked = true
     this.initialInputBuffer = ''
 
@@ -152,6 +158,7 @@ export class AgentSession extends EventEmitter {
 
   private static normalizeDisplayName(input: string): string {
     const withoutAnsi = input
+      .replace(/\x1b[P_^X][^\x1b]*(?:\x1b\\)?/g, '')  // DCS, APC, PM, SOS（複数文字シーケンス）
       .replace(/\x1b\][^\x07]*(?:\x07|\x1b\\)/g, '')
       .replace(/\x1b\[[0-?]*[ -/]*[@-~]/g, '')
       .replace(/\x1b[@-Z\\-_]/g, '')

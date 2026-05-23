@@ -91,6 +91,31 @@ describe('AgentSession', () => {
     expect(session.displayName).toBe(lockedName)
   })
 
+  it('APCシーケンス（\\x1b_...\\x1b\\\\）に埋め込まれたCRLFで表示名が汚染されない', () => {
+    const originalName = session.displayName
+
+    // Warpターミナルがstdinに送るようなAPCシーケンス（改行を含む）
+    session.write('\x1b_Warp;tab-name=My Warp Tab\r\n\x1b\\')
+
+    expect(session.displayName).toBe(originalName)
+  })
+
+  it('APCシーケンスを受信後にユーザー入力で正しい表示名を設定する', () => {
+    // Warpのシーケンスが先に来ても、その後のユーザー入力がタイトルになる
+    session.write('\x1b_Warp;tab-name=My Warp Tab\r\n\x1b\\')
+    session.write('こんにちは\r')
+
+    expect(session.displayName).toBe('こんにちは')
+  })
+
+  it('DCSシーケンス（\\x1bP...\\x1b\\\\）に埋め込まれたCRLFで表示名が汚染されない', () => {
+    const originalName = session.displayName
+
+    session.write('\x1bPsome device control string\r\n\x1b\\')
+
+    expect(session.displayName).toBe(originalName)
+  })
+
   it('kill()でPTYが終了される', () => {
     session.kill()
     expect(getMockPty().kill).toHaveBeenCalled()

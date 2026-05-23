@@ -56,12 +56,8 @@ export function start(options: StartOptions = {}): void {
     ? config.agents.filter((a) => a.type === options.agentType)
     : config.agents
 
-  if (agentsToStart.length === 0) {
-    console.error(
-      options.agentType
-        ? `No agents found for type: ${options.agentType}`
-        : 'No agents found in config'
-    )
+  if (agentsToStart.length === 0 && options.agentType) {
+    console.error(`No agents found for type: ${options.agentType}`)
     process.exit(1)
   }
 

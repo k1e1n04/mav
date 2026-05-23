@@ -53,7 +53,16 @@ describe('start', () => {
     process.removeAllListeners('SIGHUP')
   })
 
-  it('agentType 未指定で起動対象がない場合は undefined を含まないエラーを出す', () => {
+  it('agentType 未指定で config の agents が空の場合はセッションなしで起動する', () => {
+    loadConfigMock.mockReturnValue({ agents: [] })
+
+    start()
+
+    expect(managerAddSessionMock).not.toHaveBeenCalled()
+    expect(appStartMock).toHaveBeenCalled()
+  })
+
+  it('agentType を指定したのに対象が見つからない場合はエラーになる', () => {
     loadConfigMock.mockReturnValue({ agents: [] })
     const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
     const exitSpy = vi
@@ -62,10 +71,8 @@ describe('start', () => {
         throw new Error(`exit:${code ?? ''}`)
       }) as never)
 
-    expect(() => start()).toThrow('exit:1')
-    expect(errorSpy).toHaveBeenCalledWith('No agents found in config')
-    expect(managerAddSessionMock).not.toHaveBeenCalled()
-    expect(appStartMock).not.toHaveBeenCalled()
+    expect(() => start({ agentType: 'nonexistent' })).toThrow('exit:1')
+    expect(errorSpy).toHaveBeenCalledWith('No agents found for type: nonexistent')
 
     errorSpy.mockRestore()
     exitSpy.mockRestore()

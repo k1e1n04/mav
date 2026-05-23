@@ -20,7 +20,7 @@ const DEFAULT_CMDS: Record<string, { cmd: string; args: string[]; resumeArgs?: s
 }
 
 const DEFAULT_CONFIG: MavConfig = {
-  agents: [{ type: 'claude-code', cmd: 'claude', args: [] }],
+  agents: [],
 }
 
 export function loadConfig(configPath: string): MavConfig {
