@@ -48,12 +48,12 @@ describe('loadConfig', () => {
     expect(config.agents[0].cmd).toBe('gemini')
   })
 
-  it('copilotのデフォルトcmdはgh', () => {
+  it('copilotのデフォルトcmdはcopilot', () => {
     const yaml = `agents:\n  - type: copilot\n`
     writeFileSync(join(TMP, 'config.yaml'), yaml)
     const config = loadConfig(join(TMP, 'config.yaml'))
-    expect(config.agents[0].cmd).toBe('gh')
-    expect(config.agents[0].args).toEqual(['copilot', 'suggest'])
+    expect(config.agents[0].cmd).toBe('copilot')
+    expect(config.agents[0].args).toEqual([])
   })
 
   it('args が配列でない場合はデフォルトargsにフォールバックする', () => {

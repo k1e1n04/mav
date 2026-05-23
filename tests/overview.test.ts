@@ -196,6 +196,41 @@ describe('OverviewUI', () => {
     expect(onSessionCreated).toHaveBeenCalledWith(addedSession)
   })
 
+  it('copilot選択時は copilot コマンドでセッションを起動する', () => {
+    const initialSession = { id: 'claude-code#1', status: 'running', logBuffer: [], write: vi.fn() }
+    const addedSession = { id: 'copilot#1', status: 'running', logBuffer: [], write: vi.fn() }
+    const screen = { render: vi.fn() }
+    const manager = Object.assign(new EventEmitter(), {
+      sessions: [initialSession],
+      selectedIndex: 0,
+      selectedSession: initialSession,
+      selectSession(index: number) {
+        this.selectedIndex = index
+        this.selectedSession = this.sessions[index] ?? null
+      },
+      addSession: vi.fn(() => {
+        manager.sessions.push(addedSession)
+        return addedSession
+      }),
+      removeSession: vi.fn(),
+    })
+
+    new OverviewUI(screen as never, manager as never)
+
+    const listBox = widgets.createdLists[0]!
+    listBox.handlers.get('n')?.()
+    const prompt = widgets.createdLists[1]!
+
+    prompt.selected = 3
+    prompt.handlers.get('enter')?.()
+
+    expect(manager.addSession).toHaveBeenCalledWith({
+      type: 'copilot',
+      cmd: 'copilot',
+      args: [],
+    })
+  })
+
   it('右ペインには選択中セッションの詳細だけを表示する', () => {
     const firstSession = {
       id: 'claude-code#1',
@@ -237,6 +272,70 @@ describe('OverviewUI', () => {
     expect(switchedTerminal.content).not.toContain('first line')
   })
 
+  it('overview表示時に選択中セッションを右ペイン寸法へresizeする', () => {
+    const session = {
+      id: 'claude-code#1',
+      status: 'running',
+      logBuffer: ['first line\r\n'],
+      write: vi.fn(),
+      resize: vi.fn(),
+    }
+    const screen = { render: vi.fn(), width: 120, height: 40 }
+    const manager = Object.assign(new EventEmitter(), {
+      sessions: [session],
+      selectedIndex: 0,
+      selectedSession: session,
+      selectSession(index: number) {
+        this.selectedIndex = index
+        this.selectedSession = this.sessions[index] ?? null
+      },
+      addSession: vi.fn(),
+      removeSession: vi.fn(),
+    })
+
+    const ui = new OverviewUI(screen as never, manager as never)
+    ui.show()
+
+    expect(session.resize).toHaveBeenCalledWith(88, 35)
+  })
+
+  it('overviewで選択セッションを切り替えた時に右ペイン寸法へresizeする', () => {
+    const firstSession = {
+      id: 'claude-code#1',
+      status: 'running',
+      logBuffer: ['first line\r\n'],
+      write: vi.fn(),
+      resize: vi.fn(),
+    }
+    const secondSession = {
+      id: 'codex#1',
+      status: 'running',
+      logBuffer: ['second line\r\n'],
+      write: vi.fn(),
+      resize: vi.fn(),
+    }
+    const screen = { render: vi.fn(), width: 120, height: 40 }
+    const manager = Object.assign(new EventEmitter(), {
+      sessions: [firstSession, secondSession],
+      selectedIndex: 0,
+      selectedSession: firstSession,
+      selectSession(index: number) {
+        this.selectedIndex = index
+        this.selectedSession = this.sessions[index] ?? null
+      },
+      addSession: vi.fn(),
+      removeSession: vi.fn(),
+    })
+
+    const ui = new OverviewUI(screen as never, manager as never)
+    ui.show()
+
+    const listBox = widgets.createdLists[0]!
+    listBox.handlers.get('down')?.()
+
+    expect(secondSession.resize).toHaveBeenCalledWith(88, 35)
+  })
+
   it('右ペインにはANSIを剥がさず生のPTY出力を流す', () => {
     const session = {
       id: 'claude-code#1',
@@ -262,5 +361,71 @@ describe('OverviewUI', () => {
 
     const detailTerminal = widgets.createdTerminals.at(-1)!
     expect(detailTerminal.content).toContain('\u001b[2mfoo\u001b[0m bar\r\n')
+  })
+
+  it('overviewの右ペインでは全画面UI向け制御シーケンスを履歴から除去する', () => {
+    const session = {
+      id: 'claude-code#1',
+      status: 'running',
+      logBuffer: [
+        '\x1b[?1049h',
+        '\x1b[H\x1b[2J',
+        '\x1b[2mfoo\x1b[0m',
+        '\x1b[2K',
+        '\x1b]0;title\x07',
+        '\x1b[1;1Hbar\r\n',
+      ],
+      write: vi.fn(),
+    }
+    const screen = { render: vi.fn() }
+    const manager = Object.assign(new EventEmitter(), {
+      sessions: [session],
+      selectedIndex: 0,
+      selectedSession: session,
+      selectSession(index: number) {
+        this.selectedIndex = index
+        this.selectedSession = this.sessions[index] ?? null
+      },
+      addSession: vi.fn(),
+      removeSession: vi.fn(),
+    })
+
+    const ui = new OverviewUI(screen as never, manager as never)
+    ui.show()
+
+    const detailTerminal = widgets.createdTerminals.at(-1)!
+    expect(detailTerminal.content).toBe('\x1b[2mfoo\x1b[0mbar\r\n')
+  })
+
+  it('overviewの右ペインでは全画面UI向け制御シーケンスをライブ出力から除去する', () => {
+    const session = {
+      id: 'claude-code#1',
+      status: 'running',
+      logBuffer: [],
+      write: vi.fn(),
+    }
+    const screen = { render: vi.fn() }
+    const manager = Object.assign(new EventEmitter(), {
+      sessions: [session],
+      selectedIndex: 0,
+      selectedSession: session,
+      selectSession(index: number) {
+        this.selectedIndex = index
+        this.selectedSession = this.sessions[index] ?? null
+      },
+      addSession: vi.fn(),
+      removeSession: vi.fn(),
+    })
+
+    const ui = new OverviewUI(screen as never, manager as never)
+    ui.show()
+
+    const detailTerminal = widgets.createdTerminals.at(-1)!
+    manager.emit('data', session.id, '\x1b[H\x1b[2J\x1b[2mfoo\x1b[0m\x1b[1;1Hbar')
+
+    expect(detailTerminal.content).toContain('\x1b[2mfoo\x1b[0mbar')
+    expect(detailTerminal.content).not.toContain('\x1b[H')
+    expect(detailTerminal.content).not.toContain('\x1b[2J')
+    expect(detailTerminal.content).not.toContain('\x1b[1;1H')
   })
 })

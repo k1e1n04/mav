@@ -78,7 +78,7 @@ agents:
     cmd: gemini
   - type: copilot
     cmd: gh
-    args: ["copilot", "suggest"]
+    args: []
 ```
 
 ### エージェントのデフォルトコマンド
@@ -88,7 +88,7 @@ agents:
 | `claude-code` | `claude` |
 | `codex` | `codex` |
 | `gemini-cli` | `gemini` |
-| `copilot` | `gh copilot suggest` |
+| `copilot` | `copilot` |
 
 ## キーバインド
 

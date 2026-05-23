@@ -9,6 +9,15 @@ type TerminalWidget = Widgets.BoxElement & {
 }
 
 export class OverviewUI {
+  private static readonly LIST_WIDTH_RATIO = 0.25
+  private static readonly INPUT_BAR_HEIGHT = 3
+  private static readonly BORDER_SIZE = 2
+  private static readonly OSC_SEQUENCE_PATTERN = /\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)/g
+  private static readonly ALT_SCREEN_PATTERN = /\x1b\[\?104[79][hl]|\x1b\[\?47[hl]/g
+  private static readonly DEVICE_CONTROL_PATTERN = /\x1b\[(?:>?\d*c|\?u|>q|\?\d+\$p)/g
+  private static readonly VIEWPORT_CONTROL_PATTERN = /\x1b\[[0-9;?]*[ABCDHJKSTfhlsu]/g
+  private static readonly DEC_CURSOR_PATTERN = /\x1b[78]/g
+
   private screen: Widgets.Screen
   private manager: SessionManager
   private onSessionCreated?: (session: SessionManager['selectedSession']) => void
@@ -65,7 +74,7 @@ export class OverviewUI {
         return
       }
       this.ensureDetailSession()
-      this.detailTerminal.write(chunk)
+      this.detailTerminal.write(this.sanitizeOverviewOutput(chunk))
       screen.render()
     })
 
@@ -189,7 +198,7 @@ export class OverviewUI {
         'claude-code': { cmd: 'claude', args: [] },
         'codex': { cmd: 'codex', args: [] },
         'gemini-cli': { cmd: 'gemini', args: [] },
-        'copilot': { cmd: 'gh', args: ['copilot', 'suggest'] },
+        'copilot': { cmd: 'copilot', args: [] },
       }
       const d = defaults[selected] ?? { cmd: selected, args: [] }
       const session = this.manager.addSession({ type: selected, cmd: d.cmd, args: d.args })
@@ -266,6 +275,37 @@ export class OverviewUI {
     this.detailTerminal = this.createDetailTerminal()
   }
 
+  private getDetailViewportSize(): { cols: number; rows: number } {
+    const screenWidth = Number(this.screen.width) || 80
+    const screenHeight = Number(this.screen.height) || 24
+    const listWidth = Math.floor(screenWidth * OverviewUI.LIST_WIDTH_RATIO)
+    const detailWidth = Math.max(1, screenWidth - listWidth)
+    const detailHeight = Math.max(1, screenHeight - OverviewUI.INPUT_BAR_HEIGHT)
+
+    return {
+      cols: Math.max(1, detailWidth - OverviewUI.BORDER_SIZE),
+      rows: Math.max(1, detailHeight - OverviewUI.BORDER_SIZE),
+    }
+  }
+
+  private resizeSessionToDetail(session: SessionManager['selectedSession']): void {
+    if (!session || typeof session.resize !== 'function') {
+      return
+    }
+
+    const { cols, rows } = this.getDetailViewportSize()
+    session.resize(cols, rows)
+  }
+
+  private sanitizeOverviewOutput(output: string): string {
+    return output
+      .replace(OverviewUI.OSC_SEQUENCE_PATTERN, '')
+      .replace(OverviewUI.ALT_SCREEN_PATTERN, '')
+      .replace(OverviewUI.DEVICE_CONTROL_PATTERN, '')
+      .replace(OverviewUI.VIEWPORT_CONTROL_PATTERN, '')
+      .replace(OverviewUI.DEC_CURSOR_PATTERN, '')
+  }
+
   private ensureDetailSession(): void {
     const selectedId = this.manager.selectedSession?.id ?? null
     if (this.detailSessionId === selectedId) {
@@ -281,14 +321,13 @@ export class OverviewUI {
     this.setDetailLabel()
 
     const session = this.manager.selectedSession
+    this.resizeSessionToDetail(session)
     if (!session) {
       this.detailTerminal.write('No agents running.\r\n\r\nPress "n" to add a session.\r\n')
       return
     }
 
-    const safeLog = session.logBuffer
-      .join('')
-      .replace(/\x1b\[(?:>?\d*c|\?u|>q|\?\d+\$p)/g, '')
+    const safeLog = this.sanitizeOverviewOutput(session.logBuffer.join(''))
     this.detailTerminal.write(safeLog)
   }
 
@@ -304,6 +343,10 @@ export class OverviewUI {
 
   isPromptOpen(): boolean {
     return this.promptOpen
+  }
+
+  resizeSelectedSession(): void {
+    this.resizeSessionToDetail(this.manager.selectedSession)
   }
 
   hide(): void {

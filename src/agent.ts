@@ -14,6 +14,7 @@ export class AgentSession extends EventEmitter {
   lastPrompt: string = ''
 
   private ptyProcess: pty.IPty | undefined
+  private exited = false
 
   constructor(config: AgentConfig, cols: number, rows: number) {
     super()
@@ -46,19 +47,24 @@ export class AgentSession extends EventEmitter {
 
     this.ptyProcess.onExit(({ exitCode }) => {
       this.status = exitCode === 0 ? 'done' : 'error'
+      this.exited = true
+      this.ptyProcess = undefined
       this.emit('exit', exitCode)
     })
   }
 
   write(data: string): void {
+    if (this.exited) return
     this.ptyProcess?.write(data)
   }
 
   kill(): void {
+    if (this.exited) return
     this.ptyProcess?.kill()
   }
 
   resize(cols: number, rows: number): void {
+    if (this.exited) return
     this.ptyProcess?.resize(cols, rows)
   }
 

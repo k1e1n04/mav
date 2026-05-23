@@ -73,6 +73,14 @@ describe('AgentSession', () => {
     expect(getMockPty().resize).toHaveBeenCalledWith(100, 30)
   })
 
+  it('exit後のresize()はPTYをリサイズしない', () => {
+    onExitCb?.({ exitCode: 1 })
+
+    session.resize(100, 30)
+
+    expect(getMockPty().resize).not.toHaveBeenCalled()
+  })
+
   it('データ受信時にonDataイベントが発火される', () => {
     const handler = vi.fn()
     session.on('data', handler)

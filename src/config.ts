@@ -15,7 +15,7 @@ const DEFAULT_CMDS: Record<string, { cmd: string; args: string[] }> = {
   'claude-code': { cmd: 'claude', args: [] },
   'codex': { cmd: 'codex', args: [] },
   'gemini-cli': { cmd: 'gemini', args: [] },
-  'copilot': { cmd: 'gh', args: ['copilot', 'suggest'] },
+  'copilot': { cmd: 'copilot', args: [] },
 }
 
 const DEFAULT_CONFIG: MavConfig = {

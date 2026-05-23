@@ -47,9 +47,12 @@ export class App {
     this.screen.on('resize', () => {
       const cols = this.screen.width as number
       const rows = this.screen.height as number
-      for (const session of this.manager.sessions) {
-        session.resize(cols, rows)
+      if (this.mode === 'detail') {
+        this.detailUI.resize(cols, rows)
+        return
       }
+
+      this.overviewUI.resizeSelectedSession()
     })
   }
 
@@ -86,6 +89,7 @@ export class App {
     this.screen.program.disableMouse()
     this.screen.realloc()
     this.detailUI.attach(session)
+    this.detailUI.resize(this.screen.width as number, this.screen.height as number)
     this.detailUI.show()
   }
 
@@ -100,12 +104,8 @@ export class App {
   }
 
   start(): void {
-    const cols = this.screen.width as number
-    const rows = this.screen.height as number
-    for (const session of this.manager.sessions) {
-      session.resize(cols, rows)
-    }
     this.overviewUI.show()
+    this.overviewUI.resizeSelectedSession()
     this.screen.render()
   }
 }

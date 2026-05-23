@@ -9,10 +9,12 @@ const {
   screenDestroyMock,
   overviewShowMock,
   overviewHideMock,
+  overviewResizeSelectedSessionMock,
   detailShowMock,
   detailHideMock,
   detailAttachMock,
   detailDetachMock,
+  detailResizeMock,
   killAllMock,
   screenState,
   triggerExitDetail,
@@ -27,10 +29,12 @@ const {
     screenDestroyMock: vi.fn(),
     overviewShowMock: vi.fn(),
     overviewHideMock: vi.fn(),
+    overviewResizeSelectedSessionMock: vi.fn(),
     detailShowMock: vi.fn(),
     detailHideMock: vi.fn(),
     detailAttachMock: vi.fn(),
     detailDetachMock: vi.fn(),
+    detailResizeMock: vi.fn(),
     killAllMock: vi.fn(),
     screenState: {
       current: null as {
@@ -96,6 +100,9 @@ vi.mock('../src/ui/overview.js', () => ({
     hide() {
       overviewHideMock()
     }
+    resizeSelectedSession() {
+      overviewResizeSelectedSessionMock()
+    }
   },
 }))
 
@@ -115,6 +122,9 @@ vi.mock('../src/ui/detail.js', () => ({
     }
     hide() {
       detailHideMock()
+    }
+    resize(cols: number, rows: number) {
+      detailResizeMock(cols, rows)
     }
   },
 }))
@@ -177,6 +187,21 @@ describe('App', () => {
     expect(screenState.current?.program.disableMouse).toHaveBeenCalledTimes(1)
   })
 
+  it('overviewからdetailへ入る時は選択セッションをフルスクリーン寸法へresizeする', () => {
+    const selectedSession = { id: 'claude-code#1', resize: vi.fn() }
+    const manager = {
+      sessions: [selectedSession],
+      selectedSession,
+      killAll: killAllMock,
+    }
+
+    new App(manager as never)
+
+    screenKeyHandlers.get('enter')?.()
+
+    expect(detailResizeMock).toHaveBeenCalledWith(120, 40)
+  })
+
   it('detailでCtrl+]相当の終了コールバックが走るとoverviewに戻る', () => {
     const selectedSession = { id: 'claude-code#1', resize: vi.fn() }
     const manager = {
@@ -215,5 +240,37 @@ describe('App', () => {
     expect(overviewHideMock).toHaveBeenCalledTimes(1)
     expect(detailAttachMock).toHaveBeenCalledWith(addedSession)
     expect(detailShowMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('overview中のscreen resizeでは右ペイン寸法へ再調整する', () => {
+    const selectedSession = { id: 'claude-code#1', resize: vi.fn() }
+    const manager = {
+      sessions: [selectedSession],
+      selectedSession,
+      killAll: killAllMock,
+    }
+
+    new App(manager as never)
+
+    screenOnHandlers.get('resize')?.()
+
+    expect(overviewResizeSelectedSessionMock).toHaveBeenCalledTimes(1)
+    expect(detailResizeMock).not.toHaveBeenCalled()
+  })
+
+  it('detail中のscreen resizeではフルスクリーン寸法へ再調整する', () => {
+    const selectedSession = { id: 'claude-code#1', resize: vi.fn() }
+    const manager = {
+      sessions: [selectedSession],
+      selectedSession,
+      killAll: killAllMock,
+    }
+
+    new App(manager as never)
+
+    screenKeyHandlers.get('enter')?.()
+    screenOnHandlers.get('resize')?.()
+
+    expect(detailResizeMock).toHaveBeenCalledWith(120, 40)
   })
 })
