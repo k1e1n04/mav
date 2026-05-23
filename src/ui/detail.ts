@@ -22,6 +22,10 @@ export class DetailUI {
     const safeLog = session.logBuffer
       .join('')
       .replace(/\x1b\[\?104[79][hl]|\x1b\[\?47[hl]/g, '')
+      // Strip terminal capability queries (DA, kitty keyboard, XTVERSION, DECRQM).
+      // Replaying them causes Ghostty to send fresh responses that rawInputListener
+      // would forward to the PTY as spurious input, corrupting the agent's prompt.
+      .replace(/\x1b\[(?:>?\d*c|\?u|>q|\?\d+\$p)/g, '')
     output.write('\x1b[?1l')    // Normal cursor key mode (← sends \x1b[D)
     output.write('\x1b[H\x1b[2J')
     output.write(safeLog)
