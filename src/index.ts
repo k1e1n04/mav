@@ -71,6 +71,8 @@ export function start(options: StartOptions = {}): void {
   const app = new App(manager, statePath)
 
   const typeCounters: Record<string, number> = {}
+  const configSessionIds = new Set<string>()
+
   for (const agentConfig of agentsToStart) {
     typeCounters[agentConfig.type] = (typeCounters[agentConfig.type] ?? 0) + 1
     const predictedId = `${agentConfig.type}#${typeCounters[agentConfig.type]}`
@@ -84,9 +86,31 @@ export function start(options: StartOptions = {}): void {
     )
 
     const session = manager.addSession({ ...agentConfig, args }) as AgentSession & { sessionId?: string }
+    session.baseArgs = agentConfig.args
+    configSessionIds.add(session.id)
 
     if (newSessionId != null) {
       session.sessionId = newSessionId
+    }
+  }
+
+  // configに定義されていないが保存済みセッション（動的追加分）を再作成する
+  if (savedState) {
+    for (const [stateId, savedSession] of Object.entries(savedState.sessions)) {
+      if (configSessionIds.has(stateId) || !savedSession.agentBase) continue
+
+      const rc = savedSession.agentBase
+      const { args, newSessionId } = resolveSessionArgs(
+        rc.type,
+        rc.args,
+        savedSession.sessionId,
+        true,
+      )
+      const session = manager.addSession({ type: rc.type, cmd: rc.cmd, args }) as AgentSession & { sessionId?: string }
+      session.baseArgs = rc.args
+      if (newSessionId != null) {
+        session.sessionId = newSessionId
+      }
     }
   }
 

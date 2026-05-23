@@ -5,8 +5,23 @@ import { join } from 'node:path'
 import { saveState, loadState } from '../src/state.js'
 import type { SessionManager } from '../src/session-manager.js'
 
-function makeManager(sessions: Array<{ id: string; logBuffer: string[]; status: string; sessionId?: string }>) {
-  return { sessions } as unknown as SessionManager
+function makeManager(sessions: Array<{
+  id: string
+  logBuffer: string[]
+  status: string
+  sessionId?: string
+  displayName?: string
+  type?: string
+  cmd?: string
+  baseArgs?: string[]
+}>) {
+  const normalized = sessions.map((s) => ({
+    type: s.type ?? s.id.split('#')[0] ?? 'unknown',
+    cmd: s.cmd ?? s.id.split('#')[0] ?? 'unknown',
+    baseArgs: s.baseArgs ?? [],
+    ...s,
+  }))
+  return { sessions: normalized } as unknown as SessionManager
 }
 
 describe('loadState', () => {
@@ -89,5 +104,34 @@ describe('saveState / loadState', () => {
     const state = loadState(statePath)
     expect(state?.sessions['claude-code#1']?.logBuffer).toEqual(['a'])
     expect(state?.sessions['gemini-cli#1']?.logBuffer).toEqual(['b', 'c'])
+  })
+
+  it('displayNameをstateに保存して復元できる', () => {
+    const manager = makeManager([
+      { id: 'claude-code#1', logBuffer: [], status: 'idle', displayName: 'fix the login bug' },
+    ])
+    saveState(statePath, manager)
+    const state = loadState(statePath)
+    expect(state?.sessions['claude-code#1']?.displayName).toBe('fix the login bug')
+  })
+
+  it('agentBase（type/cmd/args）をstateに保存して復元できる', () => {
+    const manager = makeManager([
+      {
+        id: 'codex#1',
+        logBuffer: [],
+        status: 'idle',
+        type: 'codex',
+        cmd: 'codex',
+        baseArgs: ['--some-flag'],
+      },
+    ])
+    saveState(statePath, manager)
+    const state = loadState(statePath)
+    expect(state?.sessions['codex#1']?.agentBase).toEqual({
+      type: 'codex',
+      cmd: 'codex',
+      args: ['--some-flag'],
+    })
   })
 })

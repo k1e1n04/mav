@@ -7,6 +7,13 @@ export interface SessionState {
   logBuffer: string[]
   status: SessionStatus
   sessionId?: string
+  displayName?: string
+  /** configに定義されていない動的セッションを再起動時に復元するための情報 */
+  agentBase?: {
+    type: string
+    cmd: string
+    args: string[]
+  }
 }
 
 export interface MavState {
@@ -20,6 +27,12 @@ export function saveState(path: string, manager: SessionManager): void {
       logBuffer: [...session.logBuffer],
       status: session.status,
       ...(session.sessionId != null && { sessionId: session.sessionId }),
+      displayName: session.displayName,
+      agentBase: {
+        type: session.type,
+        cmd: session.cmd,
+        args: [...session.baseArgs],
+      },
     }
   }
   mkdirSync(dirname(path), { recursive: true })

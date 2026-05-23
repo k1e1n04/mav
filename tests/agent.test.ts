@@ -151,6 +151,31 @@ describe('AgentSession', () => {
   })
 })
 
+describe('AgentSession — restoreDisplayName', () => {
+  beforeEach(() => {
+    vi.useFakeTimers()
+    vi.clearAllMocks()
+    getMockPty().onData.mockImplementation((cb: (data: string) => void) => { void cb })
+    getMockPty().onExit.mockImplementation((cb: (e: { exitCode: number }) => void) => { void cb })
+  })
+
+  it('displayNameを上書きしてnameイベントを発火する', () => {
+    const s = new AgentSession({ type: 'claude-code', cmd: 'claude', args: [] }, 80, 24)
+    const handler = vi.fn()
+    s.on('name', handler)
+    s.restoreDisplayName('my restored name')
+    expect(s.displayName).toBe('my restored name')
+    expect(handler).toHaveBeenCalledWith('my restored name')
+  })
+
+  it('restoreDisplayName後は新しい入力で上書きされない', () => {
+    const s = new AgentSession({ type: 'claude-code', cmd: 'claude', args: [] }, 80, 24)
+    s.restoreDisplayName('locked name')
+    s.write('new input that would change name\n')
+    expect(s.displayName).toBe('locked name')
+  })
+})
+
 describe('AgentSession — ID', () => {
   beforeEach(() => {
     vi.useRealTimers()

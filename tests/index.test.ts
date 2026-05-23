@@ -245,6 +245,76 @@ describe('start', () => {
     })
   })
 
+  describe('state-only sessions（config に存在しないセッション）の再作成', () => {
+    it('agentBaseがあるstate-onlyセッションはaddSessionで再作成される', () => {
+      loadConfigMock.mockReturnValue({
+        agents: [{ type: 'claude-code', cmd: 'claude', args: [] }],
+      })
+      managerAddSessionMock
+        .mockReturnValueOnce({ id: 'claude-code#1', logBuffer: [], status: 'idle' as const, sessionId: undefined as string | undefined })
+        .mockReturnValueOnce({ id: 'codex#1', logBuffer: [], status: 'idle' as const, sessionId: undefined as string | undefined })
+      loadStateMock.mockReturnValue({
+        sessions: {
+          'claude-code#1': { logBuffer: [], status: 'idle' },
+          'codex#1': {
+            logBuffer: ['hello'],
+            status: 'idle',
+            agentBase: { type: 'codex', cmd: 'codex', args: [] },
+          },
+        },
+      })
+
+      start()
+
+      expect(managerAddSessionMock).toHaveBeenCalledTimes(2)
+      expect(managerAddSessionMock).toHaveBeenCalledWith(
+        expect.objectContaining({ type: 'codex', cmd: 'codex' })
+      )
+    })
+
+    it('agentBaseがないstate-onlyセッションは再作成されない', () => {
+      loadConfigMock.mockReturnValue({
+        agents: [{ type: 'claude-code', cmd: 'claude', args: [] }],
+      })
+      managerAddSessionMock.mockReturnValue({ id: 'claude-code#1', logBuffer: [], status: 'idle' as const })
+      loadStateMock.mockReturnValue({
+        sessions: {
+          'claude-code#1': { logBuffer: [], status: 'idle' },
+          'codex#1': { logBuffer: ['hello'], status: 'idle' },  // agentBase なし
+        },
+      })
+
+      start()
+
+      expect(managerAddSessionMock).toHaveBeenCalledTimes(1)
+    })
+
+    it('state-onlyセッションのcodexは resume --last で起動する', () => {
+      loadConfigMock.mockReturnValue({
+        agents: [{ type: 'claude-code', cmd: 'claude', args: [] }],
+      })
+      managerAddSessionMock
+        .mockReturnValueOnce({ id: 'claude-code#1', logBuffer: [], status: 'idle' as const })
+        .mockReturnValueOnce({ id: 'codex#1', logBuffer: [], status: 'idle' as const })
+      loadStateMock.mockReturnValue({
+        sessions: {
+          'claude-code#1': { logBuffer: [], status: 'idle' },
+          'codex#1': {
+            logBuffer: ['hello'],
+            status: 'idle',
+            agentBase: { type: 'codex', cmd: 'codex', args: [] },
+          },
+        },
+      })
+
+      start()
+
+      expect(managerAddSessionMock).toHaveBeenCalledWith(
+        expect.objectContaining({ type: 'codex', args: ['resume', '--last'] })
+      )
+    })
+  })
+
   it('保存済みstateがある場合、restoreLogBuffersを呼ぶ', () => {
     loadConfigMock.mockReturnValue({
       agents: [{ type: 'claude-code', cmd: 'claude', args: [] }],

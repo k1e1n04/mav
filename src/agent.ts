@@ -13,7 +13,9 @@ export class AgentSession extends EventEmitter {
 
   readonly id: string
   readonly type: string
+  readonly cmd: string
   displayName: string
+  baseArgs: string[] = []
   status: SessionStatus = 'running'
   logBuffer: string[] = []
   lastPrompt: string = ''
@@ -30,6 +32,7 @@ export class AgentSession extends EventEmitter {
     counters[config.type] = (counters[config.type] ?? 0) + 1
     this.id = `${config.type}#${counters[config.type]}`
     this.type = config.type
+    this.cmd = config.cmd
     this.displayName = `${config.type} ${counters[config.type]}`
 
     let proc: pty.IPty
@@ -64,6 +67,13 @@ export class AgentSession extends EventEmitter {
       this.ptyProcess = undefined
       this.emit('exit', exitCode)
     })
+  }
+
+  /** 保存されたdisplayNameを復元し、以降の入力で上書きされないようにロックする */
+  restoreDisplayName(name: string): void {
+    this.displayName = name
+    this.displayNameLocked = true
+    this.emit('name', name)
   }
 
   write(data: string): void {

@@ -146,6 +146,7 @@ export class OverviewUI {
       }
       const d = defaults[selected] ?? { cmd: selected, args: [] }
       const session = this.manager.addSession({ type: selected, cmd: d.cmd, args: d.args })
+      session.baseArgs = d.args
 
       if (session.status === 'error') {
         this.manager.removeSession(session.id)

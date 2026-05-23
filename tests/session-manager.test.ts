@@ -11,15 +11,22 @@ const { MockAgentSession } = vi.hoisted(() => {
     status = 'running'
     logBuffer: string[] = []
     lastPrompt = ''
+    displayName: string
+    baseArgs: string[] = []
     write = vi.fn()
     kill = vi.fn()
     resize = vi.fn()
+    restoreDisplayName = vi.fn((name: string) => {
+      this.displayName = name
+      this.emit('name', name)
+    })
 
     constructor(config: { type: string; cmd: string; args: string[] }) {
       super()
       counter++
       this.type = config.type
       this.id = `${config.type}#${counter}`
+      this.displayName = `${config.type} ${counter}`
     }
   }
   return { MockAgentSession }
@@ -173,6 +180,28 @@ describe('SessionManager', () => {
       })
       expect(s1.logBuffer).toEqual(['a'])
       expect(s2.logBuffer).toEqual(['b', 'c'])
+    })
+
+    it('displayNameが保存されている場合はrestoreDisplayNameを呼ぶ', () => {
+      manager.addSession({ type: 'claude-code', cmd: 'claude', args: [] })
+      const session = manager.sessions[0]!
+      manager.restoreLogBuffers({
+        sessions: {
+          [session.id]: { logBuffer: [], status: 'idle', displayName: 'my saved name' },
+        },
+      })
+      const mock = session as unknown as { restoreDisplayName: ReturnType<typeof vi.fn> }
+      expect(mock.restoreDisplayName).toHaveBeenCalledWith('my saved name')
+    })
+
+    it('displayNameがない場合はrestoreDisplayNameを呼ばない', () => {
+      manager.addSession({ type: 'claude-code', cmd: 'claude', args: [] })
+      const session = manager.sessions[0]!
+      manager.restoreLogBuffers({
+        sessions: { [session.id]: { logBuffer: [], status: 'idle' } },
+      })
+      const mock = session as unknown as { restoreDisplayName: ReturnType<typeof vi.fn> }
+      expect(mock.restoreDisplayName).not.toHaveBeenCalled()
     })
   })
 })

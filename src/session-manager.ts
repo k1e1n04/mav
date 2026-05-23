@@ -81,6 +81,9 @@ export class SessionManager extends EventEmitter {
         if (saved.sessionId != null) {
           session.sessionId = saved.sessionId
         }
+        if (saved.displayName) {
+          session.restoreDisplayName(saved.displayName)
+        }
       }
     }
   }
