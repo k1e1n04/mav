@@ -128,6 +128,74 @@ describe('OverviewUI', () => {
     expect(listBox.selected).toBe(1)
   })
 
+  it('一覧カーソルが selectedSession とずれていても n で追加した新規セッションを選択する', () => {
+    const firstSession = { id: 'claude-code#1', status: 'running', logBuffer: [], write: vi.fn() }
+    const secondSession = { id: 'codex#1', status: 'running', logBuffer: [], write: vi.fn() }
+    const addedSession = { id: 'gemini-cli#1', status: 'running', logBuffer: [], write: vi.fn() }
+    const screen = { render: vi.fn() }
+    const manager = Object.assign(new EventEmitter(), {
+      sessions: [firstSession, secondSession],
+      selectedIndex: 0,
+      selectedSession: firstSession,
+      selectSession(index: number) {
+        this.selectedIndex = index
+        this.selectedSession = this.sessions[index] ?? null
+      },
+      addSession: vi.fn(() => {
+        manager.sessions.push(addedSession)
+        return addedSession
+      }),
+      removeSession: vi.fn(),
+    })
+
+    new OverviewUI(screen as never, manager as never)
+
+    const listBox = widgets.createdLists[0]!
+    listBox.selected = 1
+    listBox.handlers.get('n')?.()
+    const prompt = widgets.createdLists[1]
+    expect(prompt).toBeDefined()
+
+    prompt!.selected = 2
+    prompt!.handlers.get('enter')?.()
+
+    expect(manager.selectedIndex).toBe(2)
+    expect(manager.selectedSession).toBe(addedSession)
+    expect(listBox.selected).toBe(2)
+  })
+
+  it('n でモデル選択後に新規セッションへの遷移コールバックを呼ぶ', () => {
+    const initialSession = { id: 'claude-code#1', status: 'running', logBuffer: [], write: vi.fn() }
+    const addedSession = { id: 'codex#1', status: 'running', logBuffer: [], write: vi.fn() }
+    const onSessionCreated = vi.fn()
+    const screen = { render: vi.fn() }
+    const manager = Object.assign(new EventEmitter(), {
+      sessions: [initialSession],
+      selectedIndex: 0,
+      selectedSession: initialSession,
+      selectSession(index: number) {
+        this.selectedIndex = index
+        this.selectedSession = this.sessions[index] ?? null
+      },
+      addSession: vi.fn(() => {
+        manager.sessions.push(addedSession)
+        return addedSession
+      }),
+      removeSession: vi.fn(),
+    })
+
+    new OverviewUI(screen as never, manager as never, onSessionCreated)
+
+    const listBox = widgets.createdLists[0]!
+    listBox.handlers.get('n')?.()
+    const prompt = widgets.createdLists[1]!
+
+    prompt.selected = 1
+    prompt.handlers.get('enter')?.()
+
+    expect(onSessionCreated).toHaveBeenCalledWith(addedSession)
+  })
+
   it('右ペインには選択中セッションの詳細だけを表示する', () => {
     const firstSession = {
       id: 'claude-code#1',

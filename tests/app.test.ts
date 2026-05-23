@@ -16,6 +16,7 @@ const {
   killAllMock,
   triggerExitDetail,
   setExitDetailHandler,
+  overviewCtorArgs,
 } = vi.hoisted(() => {
   let onExitDetailHandler: (() => void) | null = null
   return {
@@ -30,6 +31,7 @@ const {
     detailAttachMock: vi.fn(),
     detailDetachMock: vi.fn(),
     killAllMock: vi.fn(),
+    overviewCtorArgs: [] as unknown[][],
     setExitDetailHandler: (handler: () => void) => {
       onExitDetailHandler = handler
     },
@@ -64,6 +66,12 @@ vi.mock('neo-blessed', () => ({
 
 vi.mock('../src/ui/overview.js', () => ({
   OverviewUI: class {
+    constructor(...args: unknown[]) {
+      overviewCtorArgs.push(args)
+    }
+    isPromptOpen() {
+      return false
+    }
     show() {
       overviewShowMock()
     }
@@ -99,6 +107,7 @@ describe('App', () => {
   beforeEach(() => {
     screenKeyHandlers.clear()
     screenOnHandlers.clear()
+    overviewCtorArgs.length = 0
     vi.clearAllMocks()
   })
 
@@ -135,5 +144,26 @@ describe('App', () => {
     expect(detailDetachMock).toHaveBeenCalledTimes(1)
     expect(detailHideMock).toHaveBeenCalledTimes(1)
     expect(overviewShowMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('overviewで新規セッション作成コールバックを受けるとそのセッション詳細へ移動する', () => {
+    const initialSession = { id: 'claude-code#1', resize: vi.fn() }
+    const addedSession = { id: 'codex#1', resize: vi.fn() }
+    const manager = {
+      sessions: [initialSession, addedSession],
+      selectedSession: initialSession,
+      killAll: killAllMock,
+    }
+
+    new App(manager as never)
+
+    const onSessionCreated = overviewCtorArgs[0]?.[2] as ((session: unknown) => void) | undefined
+    expect(onSessionCreated).toBeTypeOf('function')
+
+    onSessionCreated?.(addedSession)
+
+    expect(overviewHideMock).toHaveBeenCalledTimes(1)
+    expect(detailAttachMock).toHaveBeenCalledWith(addedSession)
+    expect(detailShowMock).toHaveBeenCalledTimes(1)
   })
 })

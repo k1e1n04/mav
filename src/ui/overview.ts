@@ -11,15 +11,21 @@ type TerminalWidget = Widgets.BoxElement & {
 export class OverviewUI {
   private screen: Widgets.Screen
   private manager: SessionManager
+  private onSessionCreated?: (session: SessionManager['selectedSession']) => void
   private listBox: Widgets.ListElement
   private detailTerminal: TerminalWidget
   private inputBar: Widgets.TextboxElement
   private promptOpen = false
   private detailSessionId: string | null = null
 
-  constructor(screen: Widgets.Screen, manager: SessionManager) {
+  constructor(
+    screen: Widgets.Screen,
+    manager: SessionManager,
+    onSessionCreated?: (session: SessionManager['selectedSession']) => void
+  ) {
     this.screen = screen
     this.manager = manager
+    this.onSessionCreated = onSessionCreated
 
     this.listBox = blessed.list({
       parent: screen,
@@ -198,6 +204,7 @@ export class OverviewUI {
       this.manager.selectSession(this.manager.sessions.length - 1)
       this.syncList()
       this.refreshDetail()
+      this.onSessionCreated?.(session)
     })
 
     prompt.key('escape', close)
@@ -293,6 +300,10 @@ export class OverviewUI {
     this.syncList()
     this.refreshDetail()
     this.screen.render()
+  }
+
+  isPromptOpen(): boolean {
+    return this.promptOpen
   }
 
   hide(): void {

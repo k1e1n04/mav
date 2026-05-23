@@ -1,5 +1,6 @@
 import blessed from 'neo-blessed'
 import type { Widgets } from 'neo-blessed'
+import type { AgentSession } from '../agent.js'
 import type { SessionManager } from '../session-manager.js'
 import { OverviewUI } from './overview.js'
 import { DetailUI } from './detail.js'
@@ -22,7 +23,11 @@ export class App {
       fullUnicode: true,
     })
 
-    this.overviewUI = new OverviewUI(this.screen, manager)
+    this.overviewUI = new OverviewUI(this.screen, manager, (session) => {
+      if (session) {
+        this.switchToDetail(session)
+      }
+    })
     this.detailUI = new DetailUI(this.screen, () => {
       if (this.mode === 'detail') {
         this.switchToOverview()
@@ -66,14 +71,14 @@ export class App {
 
     this.screen.key(['right', 'enter'], () => {
       if (this.mode !== 'overview') return
+      if (this.overviewUI.isPromptOpen()) return
       const session = this.manager.selectedSession
       if (!session) return
       this.switchToDetail()
     })
   }
 
-  private switchToDetail(): void {
-    const session = this.manager.selectedSession
+  private switchToDetail(session: AgentSession | null = this.manager.selectedSession): void {
     if (!session) return
     this.mode = 'detail'
     this.overviewUI.hide()
