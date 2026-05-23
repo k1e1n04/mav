@@ -76,6 +76,14 @@ export class OverviewUI {
       this.syncList()
       screen.render()
     })
+
+    // removeSession() は emitSelection() を呼ぶが、OverviewUI は 'selection' を
+    // listen していないため、index.ts の exit ハンドラ経由で自動削除された場合に
+    // UI が再描画されない。'selection' を listen して確実に同期する。
+    manager.on('selection', () => {
+      this.syncList()
+      screen.render()
+    })
   }
 
   private bindKeys(): void {
