@@ -1,5 +1,6 @@
 import { readFileSync, existsSync } from 'node:fs'
 import { load as yamlLoad } from 'js-yaml'
+import { getAgentDefaults } from './agent-launch.js'
 
 export interface AgentConfig {
   type: string
@@ -11,13 +12,6 @@ export interface AgentConfig {
 
 export interface MavConfig {
   agents: AgentConfig[]
-}
-
-const DEFAULT_CMDS: Record<string, { cmd: string; args: string[]; resumeArgs?: string[] }> = {
-  'claude-code': { cmd: 'claude', args: [] },
-  'codex': { cmd: 'codex', args: [] },
-  'gemini-cli': { cmd: 'gemini', args: [] },
-  'copilot': { cmd: 'copilot', args: [] },
 }
 
 const DEFAULT_CONFIG: MavConfig = {
@@ -41,10 +35,13 @@ export function loadConfig(configPath: string): MavConfig {
       typeof a?.type === 'string' && a.type.length > 0
     )
     .map((a) => {
-      const defaults = DEFAULT_CMDS[a.type] ?? { cmd: a.type, args: [] }
+      const defaults = getAgentDefaults(a.type)
+      const cmd = typeof a.cmd === 'string' && a.cmd.trim().length > 0
+        ? a.cmd
+        : defaults.cmd
       return {
         type: a.type,
-        cmd: a.cmd ?? defaults.cmd,
+        cmd,
         args: Array.isArray(a.args) ? a.args : defaults.args,
         resumeArgs: Array.isArray(a.resumeArgs) ? a.resumeArgs : defaults.resumeArgs,
       }

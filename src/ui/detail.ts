@@ -4,6 +4,7 @@ import type { AgentSession } from '../agent.js'
 
 export class DetailUI {
   private static readonly KEYBOARD_FLAGS_RESPONSE_PATTERN = /\x1b\[\?(\d+)u/g
+  private static readonly PENDING_INPUT_FLUSH_DELAY_MS = 25
 
   private static readonly EXIT_SEQUENCES = [
     '\x1d',
@@ -21,6 +22,7 @@ export class DetailUI {
   private dataListener: ((data: string) => void) | null = null
   private rawInputListener: ((chunk: unknown) => void) | null = null
   private pendingInput = ''
+  private pendingInputTimer: ReturnType<typeof setTimeout> | null = null
   private keyboardEnhancementFlags: string | null = null
 
   constructor(screen: Widgets.Screen, onExitDetail: () => void) {
@@ -58,6 +60,23 @@ export class DetailUI {
     for (const match of str.matchAll(DetailUI.KEYBOARD_FLAGS_RESPONSE_PATTERN)) {
       this.keyboardEnhancementFlags = match[1] ?? null
     }
+  }
+
+  private clearPendingInputTimer(): void {
+    if (!this.pendingInputTimer) {
+      return
+    }
+    clearTimeout(this.pendingInputTimer)
+    this.pendingInputTimer = null
+  }
+
+  private flushPendingInput(): void {
+    if (!this.pendingInput) {
+      return
+    }
+    this.currentSession?.write(this.pendingInput)
+    this.pendingInput = ''
+    this.clearPendingInputTimer()
   }
 
   attach(session: AgentSession): void {
@@ -99,17 +118,22 @@ export class DetailUI {
       this.pendingInput += str
 
       if (this.isExitShortcut(this.pendingInput)) {
+        this.clearPendingInputTimer()
         this.pendingInput = ''
         this.onExitDetail()
         return
       }
 
       if (this.isExitShortcutPrefix(this.pendingInput)) {
+        this.clearPendingInputTimer()
+        this.pendingInputTimer = setTimeout(() => {
+          this.pendingInputTimer = null
+          this.flushPendingInput()
+        }, DetailUI.PENDING_INPUT_FLUSH_DELAY_MS)
         return
       }
 
-      this.currentSession?.write(this.pendingInput)
-      this.pendingInput = ''
+      this.flushPendingInput()
     }
     input.on('data', this.rawInputListener)
   }
@@ -126,6 +150,7 @@ export class DetailUI {
     if (this.keyboardEnhancementFlags) {
       this.screen.program.output.write('\x1b[=0u')
     }
+    this.clearPendingInputTimer()
     this.pendingInput = ''
     this.currentSession = null
   }

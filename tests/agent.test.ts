@@ -115,6 +115,16 @@ describe('AgentSession', () => {
     expect(session.displayName).toBe(originalName)
   })
 
+  it('短すぎる最初の入力のあとでも次の有効な入力で表示名を更新できる', () => {
+    const originalName = session.displayName
+
+    session.write('y\n')
+    session.write('valid prompt title\n')
+
+    expect(session.displayName).not.toBe(originalName)
+    expect(session.displayName).toBe('valid prompt title')
+  })
+
   it('表示名は最初の確定後に再更新しない', () => {
     session.write('first meaningful prompt\n')
     const lockedName = session.displayName
@@ -157,6 +167,22 @@ describe('AgentSession', () => {
   it('resize()でPTYがリサイズされる', () => {
     session.resize(100, 30)
     expect(getMockPty().resize).toHaveBeenCalledWith(100, 30)
+  })
+
+  it('spawn失敗後のwrite()は表示名更新もPTY書き込みもしない', async () => {
+    vi.mocked(nodePty.spawn).mockImplementationOnce(() => {
+      throw new Error('spawn failed')
+    })
+
+    const failedSession = new AgentSession({ type: 'claude-code', cmd: 'claude', args: [] }, 80, 24)
+    const originalName = failedSession.displayName
+
+    failedSession.write('valid prompt title\n')
+    await vi.runAllTicks()
+
+    expect(failedSession.status).toBe('error')
+    expect(failedSession.displayName).toBe(originalName)
+    expect(getMockPty().write).not.toHaveBeenCalled()
   })
 
   it('exit後のresize()はPTYをリサイズしない', () => {

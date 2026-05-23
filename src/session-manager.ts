@@ -89,7 +89,9 @@ export class SessionManager extends EventEmitter {
     for (const session of this.sessions) {
       const saved = state.sessions[session.id]
       if (saved) {
-        session.logBuffer = [...saved.logBuffer]
+        session.logBuffer = Array.isArray(saved.logBuffer)
+          ? saved.logBuffer.filter((chunk): chunk is string => typeof chunk === 'string')
+          : []
         if (saved.sessionId != null) {
           session.sessionId = saved.sessionId
         }

@@ -20,6 +20,7 @@ const {
   triggerExitDetail,
   setExitDetailHandler,
   overviewCtorArgs,
+  saveStateMock,
 } = vi.hoisted(() => {
   let onExitDetailHandler: (() => void) | null = null
   return {
@@ -54,6 +55,7 @@ const {
     triggerExitDetail: () => {
       onExitDetailHandler?.()
     },
+    saveStateMock: vi.fn(),
   }
 })
 
@@ -127,6 +129,10 @@ vi.mock('../src/ui/detail.js', () => ({
       detailResizeMock(cols, rows)
     }
   },
+}))
+
+vi.mock('../src/state.js', () => ({
+  saveState: saveStateMock,
 }))
 
 import { App } from '../src/ui/app.js'
@@ -272,5 +278,49 @@ describe('App', () => {
     screenOnHandlers.get('resize')?.()
 
     expect(detailResizeMock).toHaveBeenCalledWith(120, 40)
+  })
+
+  it('overviewでq押下時にsaveStateが失敗しても終了処理を続行する', () => {
+    const exitSpy = vi.spyOn(process, 'exit').mockImplementation((() => undefined) as never)
+    const manager = {
+      sessions: [],
+      selectedSession: null,
+      killAll: killAllMock,
+    }
+    saveStateMock.mockImplementationOnce(() => {
+      throw new Error('disk full')
+    })
+
+    new App(manager as never, '/tmp/state.json')
+
+    screenKeyHandlers.get('q')?.()
+
+    expect(killAllMock).toHaveBeenCalledTimes(1)
+    expect(screenDestroyMock).toHaveBeenCalledTimes(1)
+    expect(exitSpy).toHaveBeenCalledWith(0)
+
+    exitSpy.mockRestore()
+  })
+
+  it('overviewでCtrl+C押下時にsaveStateが失敗しても終了処理を続行する', () => {
+    const exitSpy = vi.spyOn(process, 'exit').mockImplementation((() => undefined) as never)
+    const manager = {
+      sessions: [],
+      selectedSession: null,
+      killAll: killAllMock,
+    }
+    saveStateMock.mockImplementationOnce(() => {
+      throw new Error('permission denied')
+    })
+
+    new App(manager as never, '/tmp/state.json')
+
+    screenKeyHandlers.get('C-c')?.()
+
+    expect(killAllMock).toHaveBeenCalledTimes(1)
+    expect(screenDestroyMock).toHaveBeenCalledTimes(1)
+    expect(exitSpy).toHaveBeenCalledWith(0)
+
+    exitSpy.mockRestore()
   })
 })

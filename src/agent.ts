@@ -51,6 +51,7 @@ export class AgentSession extends EventEmitter {
       })
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
+      this.exited = true
       this.status = 'error'
       this.logBuffer.push(`Error: failed to spawn '${config.cmd}': ${msg}\r\n`)
       process.nextTick(() => this.emit('exit', 1))
@@ -178,7 +179,6 @@ export class AgentSession extends EventEmitter {
     }
 
     const firstLine = cleaned.slice(0, newlineIndex)
-    this.displayNameLocked = true
     this.initialInputBuffer = ''
 
     const normalized = AgentSession.normalizeDisplayName(firstLine)
@@ -186,6 +186,7 @@ export class AgentSession extends EventEmitter {
       return
     }
 
+    this.displayNameLocked = true
     this.displayName = normalized
     this.emit('name', normalized)
   }

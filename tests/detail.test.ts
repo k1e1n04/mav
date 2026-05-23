@@ -20,6 +20,7 @@ describe('DetailUI', () => {
   let ui: DetailUI
 
   beforeEach(() => {
+    vi.useFakeTimers()
     input = new MockInput()
     outputWrite = vi.fn()
     onExitDetail = vi.fn()
@@ -40,6 +41,7 @@ describe('DetailUI', () => {
   })
 
   afterEach(() => {
+    vi.useRealTimers()
     delete process.env.MAV_DEBUG_KEYS_PATH
   })
 
@@ -133,6 +135,18 @@ describe('DetailUI', () => {
     expect(onExitDetail).toHaveBeenCalledTimes(1)
     expect(session.write).not.toHaveBeenCalledWith('\x1b[27;5;')
     expect(session.write).not.toHaveBeenCalledWith('93~')
+  })
+
+  it('単独のESCは短い待機後にPTYへ送る', () => {
+    ui.attach(session as never)
+
+    input.emit('data', '\x1b')
+    expect(session.write).not.toHaveBeenCalled()
+
+    vi.advanceTimersByTime(50)
+
+    expect(session.write).toHaveBeenCalledWith('\x1b')
+    expect(onExitDetail).not.toHaveBeenCalled()
   })
 
   it('入力デバッグが有効なら受け取ったバイト列をログに残す', () => {

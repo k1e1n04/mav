@@ -30,6 +30,13 @@ describe('loadConfig', () => {
     expect(config.agents[0].cmd).toBe('claude-launcher')
   })
 
+  it('cmd が空文字列なら type 由来のデフォルトcmdにフォールバックする', () => {
+    const yaml = `agents:\n  - type: codex\n    cmd: \"\"\n`
+    writeFileSync(join(TMP, 'config.yaml'), yaml)
+    const config = loadConfig(join(TMP, 'config.yaml'))
+    expect(config.agents[0].cmd).toBe('codex')
+  })
+
   it('argsを複数指定できる', () => {
     const yaml = `agents:\n  - type: copilot\n    cmd: gh\n    args:\n      - copilot\n      - suggest\n`
     writeFileSync(join(TMP, 'config.yaml'), yaml)

@@ -1,50 +1,16 @@
 import { homedir } from 'node:os'
 import { join, dirname } from 'node:path'
-import { randomUUID } from 'node:crypto'
 import { loadConfig } from './config.js'
 import { clearCurrentSessionState, saveCurrentSessionState } from './current-session.js'
 import { loadState, saveState } from './state.js'
 import { SessionManager } from './session-manager.js'
 import { App } from './ui/app.js'
 import type { AgentSession } from './agent.js'
+import { resolveSessionArgs } from './agent-launch.js'
 
 export interface StartOptions {
   configPath?: string
   agentType?: string
-}
-
-/** ツールごとのセッション管理方法を返す */
-function resolveSessionArgs(
-  type: string,
-  baseArgs: string[],
-  savedSessionId: string | undefined,
-  hasSavedState: boolean,
-): { args: string[]; newSessionId?: string } {
-  switch (type) {
-    case 'claude-code':
-    case 'gemini-cli': {
-      // --session-id で作成、--resume <uuid> で再開
-      if (savedSessionId) {
-        return { args: [...baseArgs, '--resume', savedSessionId] }
-      }
-      const id = randomUUID()
-      return { args: [...baseArgs, '--session-id', id], newSessionId: id }
-    }
-    case 'copilot': {
-      // --session-id は作成・再開の両方に使える
-      const id = savedSessionId ?? randomUUID()
-      return { args: [...baseArgs, '--session-id', id], newSessionId: savedSessionId ? undefined : id }
-    }
-    case 'codex': {
-      // resume はサブコマンド。--last で最新セッションを再開する
-      if (hasSavedState) {
-        return { args: ['resume', '--last'] }
-      }
-      return { args: baseArgs }
-    }
-    default:
-      return { args: baseArgs }
-  }
 }
 
 export function start(options: StartOptions = {}): SessionManager {

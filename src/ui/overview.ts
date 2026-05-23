@@ -1,6 +1,8 @@
 import blessed from 'neo-blessed'
 import type { Widgets } from 'neo-blessed'
 import type { SessionManager } from '../session-manager.js'
+import type { AgentSession } from '../agent.js'
+import { getAgentDefaults, resolveSessionArgs } from '../agent-launch.js'
 
 export class OverviewUI {
   private static readonly STATUS_GROUPS = [
@@ -138,19 +140,22 @@ export class OverviewUI {
       const selected = agentTypes[selectedIdx]!
       close()
 
-      const defaults: Record<string, { cmd: string; args: string[] }> = {
-        'claude-code': { cmd: 'claude', args: [] },
-        'codex': { cmd: 'codex', args: [] },
-        'gemini-cli': { cmd: 'gemini', args: [] },
-        'copilot': { cmd: 'copilot', args: [] },
+      const defaults = getAgentDefaults(selected)
+      const { args, newSessionId } = resolveSessionArgs(selected, defaults.args, undefined, false)
+      const session = this.manager.addSession({
+        type: selected,
+        cmd: defaults.cmd,
+        args,
+        cwd: process.cwd(),
+      }) as AgentSession & { sessionId?: string }
+      session.baseArgs = defaults.args
+      if (newSessionId != null) {
+        session.sessionId = newSessionId
       }
-      const d = defaults[selected] ?? { cmd: selected, args: [] }
-      const session = this.manager.addSession({ type: selected, cmd: d.cmd, args: d.args, cwd: process.cwd() })
-      session.baseArgs = d.args
 
       if (session.status === 'error') {
         this.manager.removeSession(session.id)
-        this.showError(`'${d.cmd}' command not found.\nIs ${selected} installed?`)
+        this.showError(`'${defaults.cmd}' command not found.\nIs ${selected} installed?`)
         this.syncList()
         return
       }

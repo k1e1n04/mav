@@ -62,18 +62,12 @@ export class App {
   private bindGlobalKeys(): void {
     this.screen.key('q', () => {
       if (this.mode === 'detail') return
-      saveState(this.statePath, this.manager)
-      this.manager.killAll()
-      this.screen.destroy()
-      process.exit(0)
+      this.shutdown()
     })
 
     this.screen.key('C-c', () => {
       if (this.mode === 'overview') {
-        saveState(this.statePath, this.manager)
-        this.manager.killAll()
-        this.screen.destroy()
-        process.exit(0)
+        this.shutdown()
       }
     })
 
@@ -106,6 +100,17 @@ export class App {
     this.screen.program.enableMouse()
     this.screen.realloc()
     this.overviewUI.show()
+  }
+
+  private shutdown(): void {
+    try {
+      saveState(this.statePath, this.manager)
+    } catch {
+      // 終了シーケンスは継続する
+    }
+    this.manager.killAll()
+    this.screen.destroy()
+    process.exit(0)
   }
 
   start(): void {

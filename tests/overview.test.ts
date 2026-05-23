@@ -225,7 +225,43 @@ describe('OverviewUI', () => {
     expect(manager.addSession).toHaveBeenCalledWith({
       type: 'copilot',
       cmd: 'copilot',
-      args: [],
+      args: ['--session-id', expect.any(String)],
+      cwd: process.cwd(),
+    })
+  })
+
+  it('claude-code選択時は新規session-id付きでセッションを起動する', () => {
+    const initialSession = { id: 'claude-code#1', displayName: 'claude-code 1', status: 'running', logBuffer: [], write: vi.fn() }
+    const addedSession = { id: 'claude-code#2', displayName: 'claude-code 2', status: 'running', logBuffer: [], write: vi.fn() }
+    const screen = { render: vi.fn() }
+    const manager = Object.assign(new EventEmitter(), {
+      sessions: [initialSession],
+      selectedIndex: 0,
+      selectedSession: initialSession,
+      selectSession(index: number) {
+        this.selectedIndex = index
+        this.selectedSession = this.sessions[index] ?? null
+      },
+      addSession: vi.fn(() => {
+        manager.sessions.push(addedSession)
+        return addedSession
+      }),
+      removeSession: vi.fn(),
+    })
+
+    new OverviewUI(screen as never, manager as never)
+
+    const listBox = widgets.createdLists[0]!
+    listBox.handlers.get('n')?.()
+    const prompt = widgets.createdLists[1]!
+
+    prompt.selected = 0
+    prompt.handlers.get('enter')?.()
+
+    expect(manager.addSession).toHaveBeenCalledWith({
+      type: 'claude-code',
+      cmd: 'claude',
+      args: ['--session-id', expect.any(String)],
       cwd: process.cwd(),
     })
   })

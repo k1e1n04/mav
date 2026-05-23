@@ -246,5 +246,20 @@ describe('SessionManager', () => {
       const mock = session as unknown as { restoreDisplayName: ReturnType<typeof vi.fn> }
       expect(mock.restoreDisplayName).not.toHaveBeenCalled()
     })
+
+    it('logBuffer が壊れている state でも空配列として扱う', () => {
+      manager.addSession({ type: 'claude-code', cmd: 'claude', args: [] })
+      const session = manager.sessions[0]!
+
+      expect(() => {
+        manager.restoreLogBuffers({
+          sessions: {
+            [session.id]: { logBuffer: undefined as unknown as string[], status: 'idle' },
+          },
+        })
+      }).not.toThrow()
+
+      expect(session.logBuffer).toEqual([])
+    })
   })
 })
