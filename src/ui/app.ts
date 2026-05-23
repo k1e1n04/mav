@@ -56,6 +56,7 @@ export class App {
       }
 
       this.overviewUI.resizeSelectedSession()
+      this.screen.render()
     })
   }
 

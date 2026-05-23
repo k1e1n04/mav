@@ -264,6 +264,22 @@ describe('App', () => {
     expect(detailResizeMock).not.toHaveBeenCalled()
   })
 
+  it('overview中のscreen resizeではscreen.render()を呼ぶ', () => {
+    const selectedSession = { id: 'claude-code#1', resize: vi.fn() }
+    const manager = {
+      sessions: [selectedSession],
+      selectedSession,
+      killAll: killAllMock,
+    }
+
+    new App(manager as never)
+    vi.clearAllMocks()
+
+    screenOnHandlers.get('resize')?.()
+
+    expect(screenRenderMock).toHaveBeenCalledTimes(1)
+  })
+
   it('detail中のscreen resizeではフルスクリーン寸法へ再調整する', () => {
     const selectedSession = { id: 'claude-code#1', resize: vi.fn() }
     const manager = {
