@@ -112,7 +112,7 @@ This repository now includes a Neovim plugin.
 
 - `mav` publishes the selected session state as JSON
 - the bundled Neovim plugin reads that file
-- the plugin can follow the selected session by running `:lcd` into its `cwd`
+- the plugin can follow the selected session by running `:lcd` into its live `cwd`
 
 In other words, the stable interface is the state file:
 
@@ -166,7 +166,7 @@ return {
 2. Install the plugin from this repo in Neovim using the `lazy.nvim` example above.
 3. Restart Neovim or reload your plugin config.
 4. Change the selected session in `mav`.
-5. Neovim will follow the selected session's startup `cwd`.
+5. Neovim will follow the selected session's current `cwd`, including worktree moves while the agent is running.
 
 The plugin exposes:
 
@@ -193,7 +193,7 @@ The plugin exposes:
 
 ### Current Limitation
 
-The published `cwd` is the session startup directory, not a live shell-tracked directory. If you `cd` inside the agent session after launch, Neovim will still follow the original startup path.
+Live `cwd` tracking is implemented for macOS and Linux. Updates may lag slightly behind rapid directory changes because `mav` polls the agent process `cwd` on an interval and also consumes terminal current-directory sequences when available.
 
 ## Requirements
 
