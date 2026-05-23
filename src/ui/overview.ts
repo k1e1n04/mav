@@ -143,7 +143,8 @@ export class OverviewUI {
     })
 
     prompt.key('enter', () => {
-      const selected = agentTypes[prompt.selected ?? 0]!
+      const selectedIdx = (prompt as unknown as { selected: number }).selected ?? 0
+      const selected = agentTypes[selectedIdx]!
       prompt.destroy()
 
       const defaults: Record<string, { cmd: string; args: string[] }> = {

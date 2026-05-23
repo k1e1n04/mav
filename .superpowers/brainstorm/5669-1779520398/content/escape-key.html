@@ -1,0 +1,46 @@
+<h2>Detailモードからの「戻る」操作をどうするか？</h2>
+<p class="subtitle">Escape も ← もPTYが使うので、Overviewへの戻り方が必要なのだ</p>
+
+<div class="options">
+  <div class="option" data-choice="a" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>Ctrl+\ （バックスラッシュ）</h3>
+      <p>シンプルな1キー。ほぼすべてのCLIツールで未使用。<br>
+      <span style="font-family:monospace;color:#58a6ff">Ctrl+\ → Overview に戻る</span></p>
+      <div class="pros-cons">
+        <div class="pros"><h4>◎</h4><ul><li>1キーで直感的</li><li>競合ほぼゼロ</li></ul></div>
+        <div class="cons"><h4>△</h4><ul><li>若干押しにくい</li></ul></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="option" data-choice="b" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>tmux風プレフィックスキー（推奨）</h3>
+      <p>専用プレフィックス（例: <span style="font-family:monospace;color:#58a6ff">Ctrl+G</span>）を押してから操作する。<br>
+      <span style="font-family:monospace;color:#58a6ff">Ctrl+G ←</span> または <span style="font-family:monospace;color:#58a6ff">Ctrl+G Esc</span> → Overview</span><br>
+      <span style="font-family:monospace;color:#58a6ff">Ctrl+G n</span> → 新規セッション<br>
+      <span style="font-family:monospace;color:#58a6ff">Ctrl+G q</span> → 終了</p>
+      <div class="pros-cons">
+        <div class="pros"><h4>◎</h4><ul><li>全操作を一元管理</li><li>拡張しやすい</li><li>競合ゼロ</li></ul></div>
+        <div class="cons"><h4>△</h4><ul><li>2キーストローク必要</li></ul></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="option" data-choice="c" onclick="toggleSelect(this)">
+    <div class="letter">C</div>
+    <div class="content">
+      <h3>固定ヘッダーバー常時表示</h3>
+      <p>Detailモードでも最上部1行だけ常にオーバーレイ表示。<br>
+      <span style="font-family:monospace;background:#1e3a5f;color:#58a6ff;padding:2px 6px">← Back  claude-code #1  Ctrl+C quit</span><br>
+      ← キーを画面上のヘッダーでのみキャプチャ</p>
+      <div class="pros-cons">
+        <div class="pros"><h4>◎</h4><ul><li>操作が常に見えている</li><li>直感的</li></ul></div>
+        <div class="cons"><h4>△</h4><ul><li>PTYの表示が1行削られる</li><li>ヘッダーがツールと被ることも</li></ul></div>
+      </div>
+    </div>
+  </div>
+</div>
