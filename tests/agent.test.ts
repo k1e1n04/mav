@@ -37,6 +37,30 @@ describe('AgentSession', () => {
     expect(session.status).toBe('running')
   })
 
+  it('config.cwd を保持する', () => {
+    const cwdSession = new AgentSession(
+      { type: 'codex', cmd: 'codex', args: [], cwd: '/tmp/project-a' },
+      80,
+      24,
+    )
+
+    expect(cwdSession.cwd).toBe('/tmp/project-a')
+  })
+
+  it('node-pty spawn に cwd を渡す', () => {
+    new AgentSession(
+      { type: 'claude-code', cmd: 'claude', args: [], cwd: '/tmp/project-b' },
+      80,
+      24,
+    )
+
+    expect(nodePty.spawn).toHaveBeenCalledWith(
+      'claude',
+      [],
+      expect.objectContaining({ cwd: '/tmp/project-b' }),
+    )
+  })
+
   it('PTYにデータが届くとlogBufferに追記される', () => {
     onDataCb?.('Hello World\r\n')
     expect(session.logBuffer).toContain('Hello World\r\n')

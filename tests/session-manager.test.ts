@@ -73,6 +73,27 @@ describe('SessionManager', () => {
     expect(manager.selectedIndex).toBe(1)
   })
 
+  it('selectSession で selection イベントが発火される', () => {
+    manager.addSession({ type: 'claude-code', cmd: 'claude', args: [], cwd: '/tmp/a' })
+    manager.addSession({ type: 'codex', cmd: 'codex', args: [], cwd: '/tmp/b' })
+
+    const handler = vi.fn()
+    manager.on('selection', handler)
+
+    manager.selectSession(1)
+
+    expect(handler).toHaveBeenCalledWith(manager.sessions[1])
+  })
+
+  it('最初の addSession で selection イベントが発火される', () => {
+    const handler = vi.fn()
+    manager.on('selection', handler)
+
+    manager.addSession({ type: 'claude-code', cmd: 'claude', args: [], cwd: '/tmp/a' })
+
+    expect(handler).toHaveBeenCalledWith(manager.sessions[0])
+  })
+
   it('範囲外のselectSessionは無視される', () => {
     manager.addSession({ type: 'claude-code', cmd: 'claude', args: [] })
     manager.selectSession(5)
@@ -92,6 +113,19 @@ describe('SessionManager', () => {
     manager.selectSession(1)
     manager.removeSession(manager.sessions[1]!.id)
     expect(manager.selectedIndex).toBe(0)
+  })
+
+  it('選択中セッション削除で次の selection イベントが発火される', () => {
+    manager.addSession({ type: 'claude-code', cmd: 'claude', args: [], cwd: '/tmp/a' })
+    manager.addSession({ type: 'codex', cmd: 'codex', args: [], cwd: '/tmp/b' })
+    manager.selectSession(1)
+
+    const handler = vi.fn()
+    manager.on('selection', handler)
+
+    manager.removeSession(manager.sessions[1]!.id)
+
+    expect(handler).toHaveBeenCalledWith(manager.sessions[0])
   })
 
   it('選択中より前のセッション削除で同じセッションを指し続ける', () => {

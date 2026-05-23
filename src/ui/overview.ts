@@ -145,7 +145,7 @@ export class OverviewUI {
         'copilot': { cmd: 'copilot', args: [] },
       }
       const d = defaults[selected] ?? { cmd: selected, args: [] }
-      const session = this.manager.addSession({ type: selected, cmd: d.cmd, args: d.args })
+      const session = this.manager.addSession({ type: selected, cmd: d.cmd, args: d.args, cwd: process.cwd() })
       session.baseArgs = d.args
 
       if (session.status === 'error') {

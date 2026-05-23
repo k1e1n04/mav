@@ -1,12 +1,15 @@
+import { EventEmitter } from 'node:events'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-const { loadConfigMock, managerAddSessionMock, loadStateMock, restoreLogBuffersMock, appStartMock } = vi.hoisted(() => {
+const { loadConfigMock, managerAddSessionMock, loadStateMock, restoreLogBuffersMock, appStartMock, saveCurrentSessionStateMock, clearCurrentSessionStateMock } = vi.hoisted(() => {
   return {
     loadConfigMock: vi.fn(),
     managerAddSessionMock: vi.fn(),
     loadStateMock: vi.fn(),
     restoreLogBuffersMock: vi.fn(),
     appStartMock: vi.fn(),
+    saveCurrentSessionStateMock: vi.fn(),
+    clearCurrentSessionStateMock: vi.fn(),
   }
 })
 
@@ -19,16 +22,31 @@ vi.mock('../src/state.js', () => ({
   saveState: vi.fn(),
 }))
 
+vi.mock('../src/current-session.js', () => ({
+  saveCurrentSessionState: saveCurrentSessionStateMock,
+  clearCurrentSessionState: clearCurrentSessionStateMock,
+}))
+
 vi.mock('../src/session-manager.js', () => ({
-  SessionManager: class {
+  SessionManager: class extends EventEmitter {
     sessions: unknown[] = []
+    selectedIndex = -1
+    selectedSession: unknown = null
     addSession(...args: unknown[]) {
       const result = managerAddSessionMock(...args)
       this.sessions.push(result ?? {})
+      if (this.selectedIndex === -1) {
+        this.selectedIndex = 0
+        this.selectedSession = this.sessions[0] ?? null
+      }
       return result
     }
     restoreLogBuffers(...args: unknown[]) {
       return restoreLogBuffersMock(...args)
+    }
+    emitSelection(session: unknown) {
+      this.selectedSession = session
+      this.emit('selection', session)
     }
   },
 }))
@@ -47,7 +65,7 @@ describe('start', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     loadStateMock.mockReturnValue(null)
-    managerAddSessionMock.mockReturnValue({ id: 'claude-code#1', logBuffer: [], status: 'idle' })
+    managerAddSessionMock.mockReturnValue({ id: 'claude-code#1', type: 'claude-code', displayName: 'claude-code 1', cwd: '/tmp/project-a', logBuffer: [], status: 'idle' })
     // 各テストで登録されたシグナルハンドラを除去してリーク警告を防ぐ
     process.removeAllListeners('SIGTERM')
     process.removeAllListeners('SIGHUP')
@@ -250,6 +268,65 @@ describe('start', () => {
         expect.objectContaining({ args: ['resume', '--last'] })
       )
     })
+  })
+
+  it('起動時に選択中セッションを current-session.json へ保存する', () => {
+    loadConfigMock.mockReturnValue({
+      agents: [{ type: 'codex', cmd: 'codex', args: [] }],
+    })
+    managerAddSessionMock.mockReturnValue({
+      id: 'codex#1',
+      type: 'codex',
+      displayName: 'codex 1',
+      cwd: '/tmp/project-a',
+      logBuffer: [],
+      status: 'idle',
+    })
+
+    start()
+
+    expect(saveCurrentSessionStateMock).toHaveBeenCalledWith(
+      expect.stringContaining('current-session.json'),
+      expect.objectContaining({
+        id: 'codex#1',
+        type: 'codex',
+        displayName: 'codex 1',
+        cwd: '/tmp/project-a',
+      }),
+    )
+  })
+
+  it('selection イベントで current-session.json を更新する', () => {
+    loadConfigMock.mockReturnValue({
+      agents: [{ type: 'codex', cmd: 'codex', args: [] }],
+    })
+    const createdSession = {
+      id: 'codex#1',
+      type: 'codex',
+      displayName: 'codex 1',
+      cwd: '/tmp/project-a',
+      logBuffer: [],
+      status: 'idle',
+    }
+    managerAddSessionMock.mockReturnValue(createdSession)
+
+    const manager = start() as unknown as { emitSelection: (session: unknown) => void }
+    manager.emitSelection({
+      id: 'claude-code#1',
+      type: 'claude-code',
+      displayName: 'fix bug',
+      cwd: '/tmp/project-b',
+    })
+
+    expect(saveCurrentSessionStateMock).toHaveBeenLastCalledWith(
+      expect.any(String),
+      expect.objectContaining({
+        id: 'claude-code#1',
+        type: 'claude-code',
+        displayName: 'fix bug',
+        cwd: '/tmp/project-b',
+      }),
+    )
   })
 
   describe('state-only sessions（config に存在しないセッション）の再作成', () => {
