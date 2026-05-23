@@ -66,4 +66,13 @@ describe('DetailUI', () => {
     expect(onExitDetail).toHaveBeenCalledTimes(1)
     expect(session.write).not.toHaveBeenCalledWith('\x1b[93;5u')
   })
+
+  it('詳細モードではmodifyOtherKeys形式のCtrl+]でもoverviewへ戻る', () => {
+    ui.attach(session as never)
+
+    input.emit('data', '\x1b[27;5;93~')
+
+    expect(onExitDetail).toHaveBeenCalledTimes(1)
+    expect(session.write).not.toHaveBeenCalledWith('\x1b[27;5;93~')
+  })
 })

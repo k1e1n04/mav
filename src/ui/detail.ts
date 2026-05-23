@@ -14,7 +14,11 @@ export class DetailUI {
   }
 
   private isExitShortcut(input: string): boolean {
-    return input === '\x1d' || input === '\x1b[93;5u'
+    return (
+      input === '\x1d' ||
+      input === '\x1b[93;5u' ||
+      input === '\x1b[27;5;93~'
+    )
   }
 
   attach(session: AgentSession): void {
