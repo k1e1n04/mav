@@ -272,6 +272,7 @@ describe('OverviewUI', () => {
   it('一覧には各セッションの状態ラベルを同じ行で表示し、状態ごとに並べる', () => {
     const firstSession = {
       id: 'claude-code#2',
+      type: 'codex',
       displayName: 'fix recording bug',
       status: 'done',
       logBuffer: ['thinking...\r\n'],
@@ -279,6 +280,7 @@ describe('OverviewUI', () => {
     }
     const secondSession = {
       id: 'codex#1',
+      type: 'codex',
       displayName: 'codex 1',
       status: 'running',
       logBuffer: ['completed successfully\r\n'],
@@ -286,6 +288,7 @@ describe('OverviewUI', () => {
     }
     const thirdSession = {
       id: 'gemini-cli#1',
+      type: 'gemini-cli',
       displayName: 'gemini-cli 1',
       status: 'idle',
       logBuffer: ['waiting\r\n'],
@@ -293,6 +296,7 @@ describe('OverviewUI', () => {
     }
     const fourthSession = {
       id: 'copilot#1',
+      type: 'copilot',
       displayName: 'copilot 1',
       status: 'error',
       logBuffer: ['failed\r\n'],
@@ -317,16 +321,16 @@ describe('OverviewUI', () => {
     const listBox = widgets.createdLists[0]!
     expect(listBox.items).toHaveLength(8)
     expect(listBox.items[0]).toContain('Working')
-    expect(listBox.items[1]).toContain('{cyan-fg}⣾ codex 1  working{/cyan-fg}')
+    expect(listBox.items[1]).toContain('{cyan-fg}⣾ codex 1 (codex)  working{/cyan-fg}')
     expect(listBox.items[1]).toContain('working')
     expect(listBox.items[2]).toContain('Waiting')
-    expect(listBox.items[3]).toContain('{yellow-fg}○ gemini-cli 1  waiting{/yellow-fg}')
+    expect(listBox.items[3]).toContain('{yellow-fg}○ gemini-cli 1 (gemini-cli)  waiting{/yellow-fg}')
     expect(listBox.items[3]).toContain('waiting')
     expect(listBox.items[4]).toContain('Complete')
-    expect(listBox.items[5]).toContain('{green-fg}✓ fix recording bug  complete{/green-fg}')
+    expect(listBox.items[5]).toContain('{green-fg}✓ fix recording bug (codex)  complete{/green-fg}')
     expect(listBox.items[5]).toContain('complete')
     expect(listBox.items[6]).toContain('Failed')
-    expect(listBox.items[7]).toContain('{red-fg}✗ copilot 1  failed{/red-fg}')
+    expect(listBox.items[7]).toContain('{red-fg}✗ copilot 1 (copilot)  failed{/red-fg}')
     expect(listBox.items[7]).toContain('failed')
     expect(listBox.selected).toBe(5)
   })

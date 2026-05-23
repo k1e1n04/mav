@@ -207,7 +207,8 @@ export class OverviewUI {
           : session.status === 'idle'    ? '○'
           : session.status === 'done'    ? '✓'
           : '✗'
-        const sessionLabel = session.displayName ?? session.id
+        const sessionTitle = session.displayName ?? session.id
+        const sessionLabel = session.type ? `${sessionTitle} (${session.type})` : sessionTitle
         const content = `${statusIcon} ${sessionLabel}  ${this.getStatusLabel(session.status)}`
         const color = OverviewUI.STATUS_COLORS[session.status]
         items.push(` {${color}-fg}${content}{/${color}-fg}`)
