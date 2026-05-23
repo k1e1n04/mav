@@ -1,10 +1,13 @@
 {
-  "name": "mav",
+  "name": "@k1e1n04/mav",
   "version": "0.1.0",
   "description": "Multi-agent view — manage multiple AI CLI sessions in one terminal",
   "type": "module",
   "bin": {
     "mav": "./dist/bin/mav.js"
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "license": "MIT",
   "repository": {

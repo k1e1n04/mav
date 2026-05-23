@@ -13,6 +13,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: main
+
+      - name: Checkout release tag
+        run: git checkout "${GITHUB_REF_NAME}"
 
       - uses: pnpm/action-setup@v4
         with:
@@ -50,6 +56,9 @@ jobs:
           echo "sha256=${SHA}" >> "$GITHUB_OUTPUT"
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
 
+      - name: Return to main branch
+        run: git checkout main
+
       - name: Update Homebrew formula
         env:
           VERSION: ${{ steps.sha256.outputs.version }}
@@ -63,6 +72,7 @@ jobs:
       - name: Commit updated formula
         uses: stefanzweifel/git-auto-commit-action@v5
         with:
+          branch: main
           commit_message: "chore: update formula for v${{ steps.sha256.outputs.version }}"
           file_pattern: Formula/mav.rb
           skip_dirty_check: false

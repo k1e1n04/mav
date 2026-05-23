@@ -27,16 +27,16 @@
 ### Homebrew (Recommended)
 
 ```bash
-brew tap k1e1n04/mav
+brew tap k1e1n04/mav https://github.com/k1e1n04/mav.git
 brew install mav
 ```
 
 ### npm / pnpm
 
 ```bash
-npm install -g mav
+npm install -g @k1e1n04/mav
 # or
-pnpm add -g mav
+pnpm add -g @k1e1n04/mav
 ```
 
 ### Build from Source
