@@ -96,6 +96,15 @@ export function start(options: StartOptions = {}): SessionManager {
     manager.restoreLogBuffers(savedState)
   }
 
+  manager.on('exit', (sessionId: string, code: number) => {
+    if (code === 0) return
+    const session = manager.sessions.find((s) => s.id === sessionId)
+    if (!session) return
+    if (session.logBuffer.some((chunk) => chunk.includes('No conversation found with session ID'))) {
+      manager.removeSession(sessionId)
+    }
+  })
+
   manager.on('selection', () => {
     publishSelectedSession()
   })

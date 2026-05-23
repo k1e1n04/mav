@@ -1,10 +1,11 @@
 import { EventEmitter } from 'node:events'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-const { loadConfigMock, managerAddSessionMock, loadStateMock, restoreLogBuffersMock, appStartMock, saveCurrentSessionStateMock, clearCurrentSessionStateMock } = vi.hoisted(() => {
+const { loadConfigMock, managerAddSessionMock, managerRemoveSessionMock, loadStateMock, restoreLogBuffersMock, appStartMock, saveCurrentSessionStateMock, clearCurrentSessionStateMock } = vi.hoisted(() => {
   return {
     loadConfigMock: vi.fn(),
     managerAddSessionMock: vi.fn(),
+    managerRemoveSessionMock: vi.fn(),
     loadStateMock: vi.fn(),
     restoreLogBuffersMock: vi.fn(),
     appStartMock: vi.fn(),
@@ -40,6 +41,9 @@ vi.mock('../src/session-manager.js', () => ({
         this.selectedSession = this.sessions[0] ?? null
       }
       return result
+    }
+    removeSession(...args: unknown[]) {
+      return managerRemoveSessionMock(...args)
     }
     restoreLogBuffers(...args: unknown[]) {
       return restoreLogBuffersMock(...args)
@@ -434,6 +438,69 @@ describe('start', () => {
       expect(managerAddSessionMock).toHaveBeenCalledWith(
         expect.objectContaining({ type: 'codex', args: ['resume', '--last'] })
       )
+    })
+  })
+
+  describe('期限切れセッションの自動削除', () => {
+    it('--resume セッションが "No conversation found with session ID" で失敗したら removeSession を呼ぶ', () => {
+      loadConfigMock.mockReturnValue({
+        agents: [{ type: 'claude-code', cmd: 'claude', args: [] }],
+      })
+      loadStateMock.mockReturnValue({
+        sessions: { 'claude-code#1': { logBuffer: [], status: 'idle', sessionId: 'expired-uuid' } },
+      })
+      const mockSession = {
+        id: 'claude-code#1',
+        type: 'claude-code',
+        displayName: 'claude-code 1',
+        cwd: '/tmp',
+        logBuffer: ['No conversation found with session ID: expired-uuid\r\n'],
+        status: 'error' as const,
+        sessionId: undefined as string | undefined,
+        baseArgs: [] as string[],
+      }
+      managerAddSessionMock.mockReturnValue(mockSession)
+
+      const manager = start() as unknown as EventEmitter
+      manager.emit('exit', 'claude-code#1', 1)
+
+      expect(managerRemoveSessionMock).toHaveBeenCalledWith('claude-code#1')
+    })
+
+    it('exit code 0 ならセッションを削除しない', () => {
+      loadConfigMock.mockReturnValue({
+        agents: [{ type: 'claude-code', cmd: 'claude', args: [] }],
+      })
+      loadStateMock.mockReturnValue({
+        sessions: { 'claude-code#1': { logBuffer: [], status: 'idle', sessionId: 'some-uuid' } },
+      })
+      managerAddSessionMock.mockReturnValue({
+        id: 'claude-code#1',
+        logBuffer: [],
+        status: 'done' as const,
+      })
+
+      const manager = start() as unknown as EventEmitter
+      manager.emit('exit', 'claude-code#1', 0)
+
+      expect(managerRemoveSessionMock).not.toHaveBeenCalled()
+    })
+
+    it('"No conversation found" を含まない失敗はセッションを削除しない', () => {
+      loadConfigMock.mockReturnValue({
+        agents: [{ type: 'claude-code', cmd: 'claude', args: [] }],
+      })
+      loadStateMock.mockReturnValue(null)
+      managerAddSessionMock.mockReturnValue({
+        id: 'claude-code#1',
+        logBuffer: ['something went wrong\r\n'],
+        status: 'error' as const,
+      })
+
+      const manager = start() as unknown as EventEmitter
+      manager.emit('exit', 'claude-code#1', 1)
+
+      expect(managerRemoveSessionMock).not.toHaveBeenCalled()
     })
   })
 
