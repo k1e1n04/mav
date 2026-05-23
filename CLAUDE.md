@@ -56,7 +56,9 @@ scripts/
 
 - **Overviewモード**: `OverviewUI` が表示、`listBox` にフォーカス
 - **Detailモード**: `DetailUI` が表示、全キーストロークを選択セッションのPTYに転送
-- `←` キーだけは `App` が横取りして `switchToOverview()` を呼ぶ
+- Detail から Overview へ戻るショートカットは `Ctrl+]`
+- Detail の戻るキーは `App` の `screen.key(...)` ではなく `DetailUI` の raw input listener 側で処理する
+- 理由: Detail モードでは blessed の通常キー処理をほぼバイパスしており、ショートカットが PTY 側へ流れてしまうため
 
 ### PTYイベントフロー
 
@@ -80,12 +82,14 @@ PTY.onData(chunk)
 - コメントは「なぜ」が自明でない場合のみ書く
 - `!` 非nullアサーションは配列アクセス等で安全が明らかな箇所のみ使う
 - blessed の型定義が不完全な箇所は `as unknown as T` でキャストする（`as any` は使わない）
-- UIモジュール（`src/ui/`）のユニットテストは行わない（blessed のインスタンス化が困難なため手動確認）
+- UIモジュールもロジックが分離できる範囲ではユニットテストを書く
+- `DetailUI` の raw input は terminal 実装差分を吸収する。`Ctrl+]` は少なくとも raw control code `\x1d` と kitty/ghostty 系の `CSI u` 形式 `\x1b[93;5u` を戻るキーとして扱う
 
 ## テスト方針
 
 - `config.ts` / `agent.ts` / `session-manager.ts` はユニットテスト必須
-- UIモジュール（`src/ui/`）は手動確認
+- `src/ui/` も入力変換やセッション選択のようなロジックはユニットテストで固定する
+- ただし blessed 自体の描画品質や端末依存の体験は手動確認も併用する
 - テストを追加するときは必ず先にテストを書いて失敗を確認してから実装する（TDD）
 
 ## パッケージ管理

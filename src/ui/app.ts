@@ -23,11 +23,15 @@ export class App {
     })
 
     this.overviewUI = new OverviewUI(this.screen, manager)
-    this.detailUI = new DetailUI(this.screen)
+    this.detailUI = new DetailUI(this.screen, () => {
+      if (this.mode === 'detail') {
+        this.switchToOverview()
+      }
+    })
 
-    // Suppress blessed widget rendering while in raw PTY passthrough mode
-    const proto = Object.getPrototypeOf(this.screen) as { render: () => void }
-    const protoRender = proto.render.bind(this.screen)
+    const proto = Object.getPrototypeOf(this.screen) as { render?: () => void }
+    const baseRender = proto.render ?? this.screen.render
+    const protoRender = baseRender.bind(this.screen)
     ;(this.screen as unknown as { render: () => void }).render = () => {
       if (this.mode === 'detail') return
       protoRender()
@@ -46,7 +50,7 @@ export class App {
 
   private bindGlobalKeys(): void {
     this.screen.key('q', () => {
-      if (this.mode === 'detail') return // 'q' must reach the PTY in detail mode
+      if (this.mode === 'detail') return
       this.manager.killAll()
       this.screen.destroy()
       process.exit(0)
@@ -58,7 +62,6 @@ export class App {
         this.screen.destroy()
         process.exit(0)
       }
-      // detail mode: raw input listener in DetailUI forwards \x03 to PTY
     })
 
     this.screen.key(['right', 'enter'], () => {
@@ -66,12 +69,6 @@ export class App {
       const session = this.manager.selectedSession
       if (!session) return
       this.switchToDetail()
-    })
-
-    this.screen.key('left', () => {
-      if (this.mode === 'detail') {
-        this.switchToOverview()
-      }
     })
   }
 
@@ -88,11 +85,7 @@ export class App {
     this.mode = 'overview'
     this.detailUI.detach()
     this.detailUI.hide()
-    // A done session's exit sequences may have left the terminal in the normal
-    // buffer. Re-enter the alternate buffer that blessed expects before rendering.
     this.screen.program.alternateBuffer()
-    // Reallocate blessed buffers so the next render is a full redraw,
-    // not a delta from the raw PTY output we wrote directly to the terminal.
     this.screen.realloc()
     this.overviewUI.show()
   }

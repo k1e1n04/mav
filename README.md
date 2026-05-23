@@ -3,27 +3,24 @@
 複数のAI coding assistant CLI（claude-code, codex, gemini-cli, copilot等）を1つのターミナルウィンドウで管理するラッパーCLIツールです。
 
 ```
-┌── AGENTS ──────────────┬── LOG STREAM ────────────────────────────────────┐
-│ ▶ claude-code#1        │ [claude-code#1] Reading auth.ts...               │
-│   ⣾ running            │ [gemini-cli#1]  Creating test_auth.py            │
-│   fix auth bug         │ [claude-code#1] Found issue at line 42           │
-│                        │ [codex#1]       Extracting 3 helper functions     │
-│   codex#1              │ [claude-code#1] ⣾ running bash: pnpm test...     │
-│   ✓ idle               │                                                  │
-│                        │                                                  │
-│   gemini-cli#1         │                                                  │
-│   ⣾ running            │                                                  │
-│                        │                                                  │
+┌── AGENTS ──────────────┬── DETAIL claude-code#1 running ──────────────────┐
+│ ⣾ claude-code#1       │ > fix the login redirect bug                      │
+│ ✓ codex#1             │ Reading auth.ts...                                │
+│ ○ gemini-cli#1        │ Found issue at line 42                            │
+│                       │ Running pnpm test                                 │
+│                       │                                                   │
+│                       │                                                   │
+│                       │                                                   │
 ├────────────────────────┴──────────────────────────────────────────────────┤
-│ claude-code#1 │ > fix the login redirect bug_                             │
+│ INPUT                                                                    │
 └───────────────────────────────────────────────────────────────────────────┘
 ```
 
 ## 特徴
 
 - 複数AIエージェントのセッションを1画面で俯瞰
-- `→` / `Enter` でエージェントにダイブイン、`←` で一覧に戻る
-- 全キーストロークをPTYに直接パススルー（各ツール固有の挙動を保持）
+- 左でセッションを選び、右でそのエージェントの出力詳細をライブ確認
+- `→` / `Enter` で選択中エージェントをフルスクリーン表示
 - YAMLで起動エージェントを自由に定義
 - APIキー不要（既存のCLIツールをそのまま使用）
 
@@ -99,13 +96,13 @@ agents:
 |------|----------|------|
 | `↑` `↓` | Overview | セッションリストを移動 |
 | `→` / `Enter` | Overview | 選択セッションをフルスクリーン表示 |
-| `←` | Detail | Overviewに戻る |
+| `Ctrl+]` | Detail | Overview に戻る |
 | `Tab` | Overview | 入力バーにフォーカス |
 | `n` | Overview | 新規セッションを追加 |
 | `d` | Overview | 選択セッションを終了・削除 |
-| `q` / `Ctrl+C` | Both | mav を終了（全セッションも終了） |
+| `q` / `Ctrl+C` | Overview | mav を終了（全セッションも終了） |
 
-> **Note:** Detailモードでカーソルを左移動したい場合は `←` の代わりに `Ctrl+B` を使ってください（`←` はOverviewに戻るキーとして予約されています）。
+> **Note:** Detailモードでは `←` を含むキー入力はそのままエージェントに送られます。Overview へ戻るときは `Ctrl+]` を使ってください。
 
 ## 動作要件
 

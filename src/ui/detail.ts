@@ -3,12 +3,18 @@ import type { AgentSession } from '../agent.js'
 
 export class DetailUI {
   private screen: Widgets.Screen
+  private onExitDetail: () => void
   private currentSession: AgentSession | null = null
   private dataListener: ((data: string) => void) | null = null
   private rawInputListener: ((chunk: unknown) => void) | null = null
 
-  constructor(screen: Widgets.Screen) {
+  constructor(screen: Widgets.Screen, onExitDetail: () => void) {
     this.screen = screen
+    this.onExitDetail = onExitDetail
+  }
+
+  private isExitShortcut(input: string): boolean {
+    return input === '\x1d' || input === '\x1b[93;5u'
   }
 
   attach(session: AgentSession): void {
@@ -17,16 +23,11 @@ export class DetailUI {
 
     const { input, output } = this.screen.program
 
-    // Replay log buffer directly to the physical terminal.
-    // Filter alternate-buffer switch sequences so we stay in blessed's alt buffer.
     const safeLog = session.logBuffer
       .join('')
       .replace(/\x1b\[\?104[79][hl]|\x1b\[\?47[hl]/g, '')
-      // Strip terminal capability queries (DA, kitty keyboard, XTVERSION, DECRQM).
-      // Replaying them causes Ghostty to send fresh responses that rawInputListener
-      // would forward to the PTY as spurious input, corrupting the agent's prompt.
       .replace(/\x1b\[(?:>?\d*c|\?u|>q|\?\d+\$p)/g, '')
-    output.write('\x1b[?1l')    // Normal cursor key mode (← sends \x1b[D)
+    output.write('\x1b[?1l')
     output.write('\x1b[H\x1b[2J')
     output.write(safeLog)
 
@@ -35,7 +36,6 @@ export class DetailUI {
     }
     session.on('data', this.dataListener)
 
-    // Forward raw stdin bytes to PTY, bypassing blessed's key processing
     this.rawInputListener = (chunk: unknown) => {
       const str = Buffer.isBuffer(chunk)
         ? chunk.toString('utf8')
@@ -43,10 +43,8 @@ export class DetailUI {
           ? chunk
           : ''
       if (!str) return
-      // ← in normal (\x1b[D) and application (\x1bOD) cursor key modes
-      if (str === '\x1b[D' || str === '\x1bOD') return
-      if (str === '\x02') {    // C-b → cursor left (since ← is taken for "go back")
-        this.currentSession?.write('\x1b[D')
+      if (this.isExitShortcut(str)) {
+        this.onExitDetail()
         return
       }
       this.currentSession?.write(str)

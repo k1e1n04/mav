@@ -43,7 +43,7 @@ export function loadConfig(configPath: string): MavConfig {
       return {
         type: a.type,
         cmd: a.cmd ?? defaults.cmd,
-        args: a.args ?? defaults.args,
+        args: Array.isArray(a.args) ? a.args : defaults.args,
       }
     })
 

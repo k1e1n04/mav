@@ -47,6 +47,8 @@ export class SessionManager extends EventEmitter {
 
     if (this.sessions.length === 0) {
       this.selectedIndex = -1
+    } else if (idx < this.selectedIndex) {
+      this.selectedIndex -= 1
     } else if (this.selectedIndex >= this.sessions.length) {
       this.selectedIndex = this.sessions.length - 1
     }

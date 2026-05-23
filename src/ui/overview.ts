@@ -2,13 +2,20 @@ import blessed from 'neo-blessed'
 import type { Widgets } from 'neo-blessed'
 import type { SessionManager } from '../session-manager.js'
 
+type TerminalWidget = Widgets.BoxElement & {
+  write(data: string): void
+  destroy(): void
+  setLabel(label: string): void
+}
+
 export class OverviewUI {
   private screen: Widgets.Screen
   private manager: SessionManager
   private listBox: Widgets.ListElement
-  private logBox: Widgets.BoxElement
+  private detailTerminal: TerminalWidget
   private inputBar: Widgets.TextboxElement
   private promptOpen = false
+  private detailSessionId: string | null = null
 
   constructor(screen: Widgets.Screen, manager: SessionManager) {
     this.screen = screen
@@ -30,20 +37,7 @@ export class OverviewUI {
       mouse: true,
     })
 
-    this.logBox = blessed.box({
-      parent: screen,
-      top: 0,
-      left: '25%',
-      width: '75%',
-      height: '100%-3',
-      border: { type: 'line' },
-      label: ' LOG STREAM ',
-      scrollable: true,
-      alwaysScroll: true,
-      scrollbar: { ch: '│' },
-      style: { border: { fg: 'cyan' } },
-      tags: true,
-    })
+    this.detailTerminal = this.createDetailTerminal()
 
     this.inputBar = blessed.textbox({
       parent: screen,
@@ -60,15 +54,37 @@ export class OverviewUI {
     this.bindKeys()
     this.syncList()
 
-    manager.on('data', () => {
-      this.updateLog()
+    manager.on('data', (sessionId: string, chunk: string) => {
+      if (sessionId !== this.manager.selectedSession?.id) {
+        return
+      }
+      this.ensureDetailSession()
+      this.detailTerminal.write(chunk)
       screen.render()
     })
 
     manager.on('exit', () => {
       this.syncList()
+      this.refreshDetail()
       screen.render()
     })
+  }
+
+  private createDetailTerminal(): TerminalWidget {
+    return blessed.terminal({
+      parent: this.screen,
+      top: 0,
+      left: '25%',
+      width: '75%',
+      height: '100%-3',
+      border: { type: 'line' },
+      label: ' DETAIL ',
+      cursor: 'block',
+      cursorBlink: false,
+      screenKeys: false,
+      handler: () => {},
+      style: { border: { fg: 'cyan' } },
+    }) as unknown as TerminalWidget
   }
 
   private bindKeys(): void {
@@ -77,6 +93,7 @@ export class OverviewUI {
       const idx = Math.max(0, this.manager.selectedIndex - 1)
       this.manager.selectSession(idx)
       this.listBox.select(idx)
+      this.refreshDetail()
       this.screen.render()
     })
 
@@ -88,6 +105,7 @@ export class OverviewUI {
       )
       this.manager.selectSession(idx)
       this.listBox.select(idx)
+      this.refreshDetail()
       this.screen.render()
     })
 
@@ -105,6 +123,7 @@ export class OverviewUI {
       if (session) {
         this.manager.removeSession(session.id)
         this.syncList()
+        this.refreshDetail()
         this.screen.render()
       }
     })
@@ -176,7 +195,9 @@ export class OverviewUI {
         return
       }
 
+      this.manager.selectSession(this.manager.sessions.length - 1)
       this.syncList()
+      this.refreshDetail()
     })
 
     prompt.key('escape', close)
@@ -223,42 +244,60 @@ export class OverviewUI {
     }
   }
 
-  private updateLog(): void {
-    const lines: string[] = []
-    for (const session of this.manager.sessions) {
-      // Combine recent chunks, strip all escape sequences, then split into lines
-      const raw = session.logBuffer.slice(-30).join('')
-      const stripped = raw
-        .replace(/\x1b\[[\x30-\x3f]*[\x20-\x2f]*[\x40-\x7e]/g, '') // CSI
-        .replace(/\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)/g, '')           // OSC
-        .replace(/\x1b[A-Za-z]/g, '')                                  // two-char
-        .replace(/\r/g, '\n')                                          // CR → newline for splitting
-      const textLines = stripped
-        .split('\n')
-        .map(l => l.trim())
-        .filter(l => l.length > 0)
-        .slice(-5) // last 5 non-empty lines per session
-      for (const line of textLines) {
-        lines.push(`{cyan-fg}[${session.id}]{/cyan-fg} ${line}`)
-      }
+  private setDetailLabel(): void {
+    const session = this.manager.selectedSession
+    if (!session) {
+      this.detailTerminal.setLabel(' DETAIL ')
+      return
     }
-    this.logBox.setContent(lines.join('\n'))
-    this.logBox.setScrollPerc(100)
+
+    this.detailTerminal.setLabel(` DETAIL ${session.id} ${session.status} `)
+  }
+
+  private rebuildDetailTerminal(): void {
+    this.detailTerminal.destroy()
+    this.detailTerminal = this.createDetailTerminal()
+  }
+
+  private ensureDetailSession(): void {
+    const selectedId = this.manager.selectedSession?.id ?? null
+    if (this.detailSessionId === selectedId) {
+      this.setDetailLabel()
+      return
+    }
+    this.refreshDetail()
+  }
+
+  private refreshDetail(): void {
+    this.rebuildDetailTerminal()
+    this.detailSessionId = this.manager.selectedSession?.id ?? null
+    this.setDetailLabel()
+
+    const session = this.manager.selectedSession
+    if (!session) {
+      this.detailTerminal.write('No agents running.\r\n\r\nPress "n" to add a session.\r\n')
+      return
+    }
+
+    const safeLog = session.logBuffer
+      .join('')
+      .replace(/\x1b\[(?:>?\d*c|\?u|>q|\?\d+\$p)/g, '')
+    this.detailTerminal.write(safeLog)
   }
 
   show(): void {
     this.listBox.show()
-    this.logBox.show()
+    this.detailTerminal.show()
     this.inputBar.show()
     this.listBox.focus()
     this.syncList()
-    this.updateLog()
+    this.refreshDetail()
     this.screen.render()
   }
 
   hide(): void {
     this.listBox.hide()
-    this.logBox.hide()
+    this.detailTerminal.hide()
     this.inputBar.hide()
   }
 }
