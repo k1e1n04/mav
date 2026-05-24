@@ -1,7 +1,7 @@
 import { EventEmitter } from 'node:events'
 import * as pty from 'node-pty'
 import type { AgentConfig } from './config.js'
-import { getProcessCwd } from './process-cwd.js'
+import { getProcessCwd, getClaudeChildPid } from './process-cwd.js'
 import { cleanupHookFiles } from './hook-injector.js'
 
 export type SessionStatus = 'running' | 'idle' | 'done' | 'error'
@@ -34,6 +34,7 @@ export class AgentSession extends EventEmitter {
   private exited = false
   private idleTimer: ReturnType<typeof setTimeout> | null = null
   private cwdPollTimer: ReturnType<typeof setInterval> | null = null
+  private claudeChildPid: number | null = null
   private displayNameLocked = false
   private initialInputBuffer = ''
   private hookFiles: string[] = []
@@ -54,6 +55,10 @@ export class AgentSession extends EventEmitter {
         env.MAV_SOCKET = ipcContext.socketPath
         env.MAV_SESSION_ID = this.id
         this.hookFiles = ipcContext.hookFiles
+      } else {
+        // Prevent child processes from inheriting the parent mav session's socket
+        delete env.MAV_SOCKET
+        delete env.MAV_SESSION_ID
       }
       proc = pty.spawn(config.cmd, config.args, {
         name: 'xterm-256color',
@@ -179,7 +184,20 @@ export class AgentSession extends EventEmitter {
         return
       }
 
-      this.updateCwd(getProcessCwd(this.ptyProcess.pid))
+      if (this.type === 'claude-code') {
+        if (this.claudeChildPid === null) {
+          this.claudeChildPid = getClaudeChildPid(this.ptyProcess.pid)
+        }
+        const targetPid = this.claudeChildPid ?? this.ptyProcess.pid
+        const cwd = getProcessCwd(targetPid)
+        if (cwd === null && this.claudeChildPid !== null) {
+          this.claudeChildPid = null
+        } else {
+          this.updateCwd(cwd)
+        }
+      } else {
+        this.updateCwd(getProcessCwd(this.ptyProcess.pid))
+      }
     }, AgentSession.CWD_POLL_INTERVAL_MS)
   }
 

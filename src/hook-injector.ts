@@ -1,7 +1,7 @@
 import { writeFileSync, readFileSync, existsSync, unlinkSync, mkdirSync } from 'node:fs'
 import { join } from 'node:path'
-import { homedir, tmpdir } from 'node:os'
-import { randomUUID, createHash } from 'node:crypto'
+import { homedir } from 'node:os'
+import { randomUUID } from 'node:crypto'
 
 export interface HookInjectionResult {
   /** Injected startup args */
@@ -37,8 +37,6 @@ export function buildHookArgs(
   options: BuildHookArgsOptions = {},
 ): HookInjectionResult {
   switch (agentType) {
-    case 'claude-code':
-      return buildClaudeCodeHook(baseArgs, hookCommand, options.cmd, options.settingsFile)
     case 'gemini-cli':
       return buildGeminiHook(baseArgs, hookCommand, options.cwd)
     case 'copilot':
@@ -47,103 +45,6 @@ export function buildHookArgs(
       return buildCodexHook(baseArgs, hookCommand)
     default:
       return { args: baseArgs, hookFiles: [] }
-  }
-}
-
-function buildClaudeCodeHook(
-  baseArgs: string[],
-  hookCommand: string,
-  cmd?: string,
-  settingsFile?: string,
-): HookInjectionResult {
-  // If a custom wrapper is used (e.g. claude-launcher), skip --settings <json> injection.
-  // Wrappers detect --settings in their args and skip their own overlay (including
-  // apiKeyHelper), which breaks authentication.
-  if (cmd != null && cmd !== 'claude') {
-    if (settingsFile) {
-      return buildClaudeCodeHookViaFile(baseArgs, hookCommand, settingsFile)
-    }
-    return { args: baseArgs, hookFiles: [] }
-  }
-
-  const claudeSettingsPath = join(homedir(), '.claude', 'settings.json')
-  let existing: Record<string, unknown> = {}
-  if (existsSync(claudeSettingsPath)) {
-    try {
-      existing = JSON.parse(readFileSync(claudeSettingsPath, 'utf-8')) as Record<string, unknown>
-    } catch {
-      // Unreadable/invalid JSON — start from empty
-    }
-  }
-
-  const existingHooks = (existing.hooks ?? {}) as Record<string, unknown[]>
-  const existingPostToolUse = (existingHooks.PostToolUse ?? []) as unknown[]
-
-  const merged = {
-    ...existing,
-    hooks: {
-      ...existingHooks,
-      PostToolUse: [
-        ...existingPostToolUse,
-        {
-          matcher: '',
-          hooks: [{ type: 'command', command: hookCommand }],
-        },
-      ],
-    },
-  }
-
-  return {
-    args: [...baseArgs, '--settings', JSON.stringify(merged)],
-    hookFiles: [],
-  }
-}
-
-function buildClaudeCodeHookViaFile(
-  baseArgs: string[],
-  hookCommand: string,
-  settingsFile: string,
-): HookInjectionResult {
-  const expandedPath = settingsFile.replace(/^~/, homedir())
-
-  // Read the overlay file BEFORE the wrapper starts (and potentially overwrites it).
-  // The wrapper's overlay content (apiKeyHelper etc.) is preserved in the temp file,
-  // so even though the wrapper skips its own overlay injection, auth still works.
-  let existing: Record<string, unknown> = {}
-  if (existsSync(expandedPath)) {
-    try {
-      existing = JSON.parse(readFileSync(expandedPath, 'utf-8')) as Record<string, unknown>
-    } catch {
-      // Treat as empty
-    }
-  }
-
-  const existingHooks = (existing.hooks ?? {}) as Record<string, unknown[]>
-  const existingPostToolUse = (existingHooks.PostToolUse ?? []) as unknown[]
-
-  const merged = {
-    ...existing,
-    hooks: {
-      ...existingHooks,
-      PostToolUse: [
-        ...existingPostToolUse,
-        {
-          matcher: '',
-          hooks: [{ type: 'command', command: hookCommand }],
-        },
-      ],
-    },
-  }
-
-  // Use a deterministic name based on the settingsFile path so that at most one
-  // temp file exists per overlay path — crash leftovers get overwritten next run.
-  const pathHash = createHash('sha256').update(expandedPath).digest('hex').slice(0, 8)
-  const tempPath = join(tmpdir(), `mav-settings-${pathHash}.json`)
-  writeFileSync(tempPath, JSON.stringify(merged, null, 2))
-
-  return {
-    args: [...baseArgs, '--settings', tempPath],
-    hookFiles: [tempPath],
   }
 }
 
