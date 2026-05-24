@@ -11,6 +11,8 @@ type PromptState =
   | null
 
 export class OverviewUI {
+  private static readonly HORIZONTAL_MARGIN = 1
+
   private static readonly ANSI = {
     reset: '\x1b[0m',
     bold: '\x1b[1m',
@@ -323,12 +325,49 @@ export class OverviewUI {
     return value.replace(/\x1b\[[0-9;]*m/g, '')
   }
 
+  private visibleLength(value: string): number {
+    return this.stripAnsi(value).length
+  }
+
+  private getRenderWidth(): number {
+    return Math.max(20, this.terminal.cols || 80)
+  }
+
+  private getContentWidth(): number {
+    return Math.max(10, this.getRenderWidth() - (OverviewUI.HORIZONTAL_MARGIN * 2))
+  }
+
+  private insetLine(line: string): string {
+    if (line.length === 0) return ''
+    return `${' '.repeat(OverviewUI.HORIZONTAL_MARGIN)}${line}`
+  }
+
+  private finalizeLines(lines: string[]): string[] {
+    const maxWidth = this.getRenderWidth()
+    return lines.map((line) => {
+      const inset = this.insetLine(line)
+      return this.fitVisible(inset, maxWidth)
+    })
+  }
+
   private padRight(value: string, width: number): string {
-    const visibleLength = this.stripAnsi(value).length
+    const visibleLength = this.visibleLength(value)
     if (visibleLength >= width) {
       return value
     }
     return value + ' '.repeat(width - visibleLength)
+  }
+
+  private fitPlain(value: string, width: number): string {
+    if (width <= 0) return ''
+    if (value.length <= width) return value
+    if (width === 1) return '…'
+    return `${value.slice(0, width - 1)}…`
+  }
+
+  private fitVisible(value: string, width: number): string {
+    const plain = this.stripAnsi(value)
+    return plain.length <= width ? value : this.fitPlain(plain, width)
   }
 
   private color(text: string, ...codes: string[]): string {
@@ -350,31 +389,90 @@ export class OverviewUI {
     }
   }
 
-  private makeRule(label: string, width = 64): string {
+  private makeRule(label: string, width = this.getRenderWidth()): string {
     const text = ` ${label} `
     if (text.length >= width) {
-      return text
+      return this.fitPlain(text, width)
     }
     const fill = '─'.repeat(width - text.length)
     return text + fill
   }
 
-  private formatSummary(): string {
+  private wrapPlainText(text: string, width: number): string[] {
+    if (width <= 0) return ['']
+    const words = text.split(/\s+/).filter(Boolean)
+    if (words.length === 0) return ['']
+
+    const lines: string[] = []
+    let current = ''
+    for (const word of words) {
+      const next = current ? `${current} ${word}` : word
+      if (next.length <= width) {
+        current = next
+        continue
+      }
+
+      if (current) {
+        lines.push(current)
+        current = ''
+      }
+
+      if (word.length <= width) {
+        current = word
+      } else {
+        lines.push(this.fitPlain(word, width))
+      }
+    }
+
+    if (current) {
+      lines.push(current)
+    }
+
+    return lines
+  }
+
+  private wrapVisibleParts(parts: string[], width: number): string[] {
+    if (width <= 0) return ['']
+
+    const lines: string[] = []
+    let current = ''
+    for (const part of parts) {
+      const next = current ? `${current}  ·  ${part}` : part
+      if (this.visibleLength(next) <= width) {
+        current = next
+        continue
+      }
+
+      if (current) {
+        lines.push(current)
+      }
+
+      current = this.visibleLength(part) <= width ? part : this.fitVisible(part, width)
+    }
+
+    if (current) {
+      lines.push(current)
+    }
+
+    return lines
+  }
+
+  private formatSummaryLines(width: number): string[] {
     const parts = OverviewUI.STATUS_GROUPS.map((group) => {
       const count = this.countByStatus(group.status)
       return this.color(`${group.label} ${count}`, OverviewUI.ANSI.bold, this.getStatusColor(group.status))
     })
-    return parts.join('  ·  ')
+    return this.wrapVisibleParts(parts, width)
   }
 
   private buildMainLines(): string[] {
     const orderedSessions = this.getOrderedSessions()
     const selectedId = this.manager.selectedSession?.id
+    const width = this.getContentWidth()
     const lines = [
-      '╭────────────────────────────── mav overview ──────────────────────────────╮',
-      `│ ${this.padRight('AGENTS', 74)} │`,
-      `│ ${this.padRight(this.formatSummary(), 74)} │`,
-      '╰──────────────────────────────────────────────────────────────────────────╯',
+      this.color(this.makeRule('mav overview', width), OverviewUI.ANSI.dim),
+      'AGENTS',
+      ...this.formatSummaryLines(width),
       '',
     ]
 
@@ -397,7 +495,10 @@ export class OverviewUI {
           const sessionTitle = session.displayName ?? session.id
           const sessionLabel = session.type ? `${sessionTitle} (${session.type})` : sessionTitle
           const prefix = session.id === selectedId ? '> ' : '  '
-          const sessionLine = `${prefix}${statusIcon} ${sessionLabel}  ${this.getStatusLabel(session.status)}`
+          const sessionLine = this.fitPlain(
+            `${prefix}${statusIcon} ${sessionLabel}  ${this.getStatusLabel(session.status)}`,
+            width
+          )
           lines.push(session.id === selectedId
             ? this.color(sessionLine, OverviewUI.ANSI.bold, color)
             : this.color(sessionLine, color))
@@ -408,58 +509,55 @@ export class OverviewUI {
     }
 
     if (orderedSessions.length === 0) {
-      lines.push(this.makeRule('empty'))
-      lines.push('  No sessions. Press n to add one.')
+      lines.push(this.color(this.makeRule('empty', width), OverviewUI.ANSI.dim))
+      lines.push(this.fitPlain('  No sessions. Press n to add one.', width))
       lines.push('')
     }
 
-    lines.push('╭──────────────────────────────── controls ────────────────────────────────╮')
-    lines.push(`│ ${this.padRight('↑/↓ or j/k move   Enter detail   Ctrl+] back   n new   d delete   q quit', 74)} │`)
-    lines.push('╰──────────────────────────────────────────────────────────────────────────╯')
-    return lines
+    lines.push(this.color(this.makeRule('controls', width), OverviewUI.ANSI.dim))
+    lines.push(...this.wrapPlainText('↑/↓ or j/k move   Enter detail   Ctrl+] back   n new   d delete   q quit', width))
+    return this.finalizeLines(lines)
   }
 
   private buildPromptLines(): string[] {
     const state = this.promptState
     if (!state) return []
 
-    const lines = ['', '╭──────────────────────────────── prompt ──────────────────────────────────╮']
+    const width = this.getContentWidth()
+    const lines = ['', this.color(this.makeRule('prompt', width), OverviewUI.ANSI.dim)]
     if (state.mode === 'agent') {
-      lines.push(`│ ${this.padRight('Select agent type', 74)} │`)
-      lines.push('│                                                                          │')
+      lines.push(this.fitPlain('Select agent type', width))
+      lines.push('')
       for (const [index, agentType] of OverviewUI.AGENT_TYPES.entries()) {
-        lines.push(`│ ${this.padRight(`${index === state.selectedIndex ? '> ' : '  '}${agentType}`, 74)} │`)
+        lines.push(this.fitPlain(`${index === state.selectedIndex ? '> ' : '  '}${agentType}`, width))
       }
-      lines.push('│                                                                          │')
-      lines.push(`│ ${this.padRight('Enter: select  Esc: cancel', 74)} │`)
-      lines.push('╰──────────────────────────────────────────────────────────────────────────╯')
-      return lines
+      lines.push('')
+      lines.push(...this.wrapPlainText('Enter: select  Esc: cancel', width))
+      return this.finalizeLines(lines)
     }
 
     if (state.mode === 'cwd') {
-      lines.push(`│ ${this.padRight(`cwd for ${state.agentType}`, 74)} │`)
-      lines.push(`│ ${this.padRight(state.value, 74)} │`)
+      lines.push(this.fitPlain(`cwd for ${state.agentType}`, width))
+      lines.push(this.fitPlain(state.value, width))
       if (state.candidates.length > 1) {
-        lines.push('│                                                                          │')
-        lines.push(`│ ${this.padRight('Candidates:', 74)} │`)
+        lines.push('')
+        lines.push(this.fitPlain('Candidates:', width))
         for (const candidate of state.candidates.slice(0, 8)) {
-          lines.push(`│ ${this.padRight(`  ${candidate}`, 74)} │`)
+          lines.push(this.fitPlain(`  ${candidate}`, width))
         }
       }
-      lines.push('│                                                                          │')
-      lines.push(`│ ${this.padRight('Tab: complete  Enter: confirm  Esc: cancel', 74)} │`)
-      lines.push('╰──────────────────────────────────────────────────────────────────────────╯')
-      return lines
+      lines.push('')
+      lines.push(...this.wrapPlainText('Tab: complete  Enter: confirm  Esc: cancel', width))
+      return this.finalizeLines(lines)
     }
 
-    lines.push(`│ ${this.padRight('Error', 74)} │`)
+    lines.push(this.fitPlain('Error', width))
     for (const line of state.message.split('\n')) {
-      lines.push(`│ ${this.padRight(line, 74)} │`)
+      lines.push(this.fitPlain(line, width))
     }
-    lines.push('│                                                                          │')
-    lines.push(`│ ${this.padRight('Enter/Esc/q: close', 74)} │`)
-    lines.push('╰──────────────────────────────────────────────────────────────────────────╯')
-    return lines
+    lines.push('')
+    lines.push(...this.wrapPlainText('Enter/Esc/q: close', width))
+    return this.finalizeLines(lines)
   }
 
   private render(): void {

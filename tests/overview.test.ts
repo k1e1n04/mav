@@ -4,6 +4,7 @@ import { OverviewUI } from '../src/ui/overview.js'
 
 class FakeTerminal {
   rendered = ''
+  cols = 80
   render = vi.fn((content: string) => {
     this.rendered = content
   })
@@ -11,6 +12,10 @@ class FakeTerminal {
 
 function key(name: string, sequence = name) {
   return { name, sequence }
+}
+
+function stripAnsi(value: string) {
+  return value.replace(/\x1b\[[0-9;]*m/g, '')
 }
 
 describe('OverviewUI', () => {
@@ -198,6 +203,66 @@ describe('OverviewUI', () => {
 
     expect(terminal.rendered).toContain('Waiting')
     expect(terminal.rendered).toContain('waiting')
+  })
+
+  it('狭い幅でも各行が端末幅を超えない', () => {
+    terminal.cols = 40
+    const session = {
+      id: 'claude-code#1',
+      type: 'claude-code',
+      displayName: 'なんかいろんなタイミングでnのエージェント選…',
+      status: 'running',
+      cwd: '/Users/ishiiken/Develop/multi-agent-view',
+      logBuffer: [],
+      write: vi.fn(),
+    }
+    const manager = Object.assign(new EventEmitter(), {
+      sessions: [session],
+      selectedIndex: 0,
+      selectedSession: session,
+      selectSession: vi.fn(),
+      addSession: vi.fn(),
+      removeSession: vi.fn(),
+    })
+
+    const ui = new OverviewUI(terminal as never, manager as never)
+    ui.show()
+
+    const widths = terminal.rendered
+      .split('\n')
+      .map((line) => stripAnsi(line).length)
+
+    expect(Math.max(...widths)).toBeLessThanOrEqual(40)
+  })
+
+  it('狭い幅でも表示内容に左余白を残す', () => {
+    terminal.cols = 40
+    const session = {
+      id: 'codex#1',
+      type: 'codex',
+      displayName: 'codex 1',
+      status: 'idle',
+      cwd: '/Users/ishiiken/Develop/multi-agent-view',
+      logBuffer: [],
+      write: vi.fn(),
+    }
+    const manager = Object.assign(new EventEmitter(), {
+      sessions: [session],
+      selectedIndex: 0,
+      selectedSession: session,
+      selectSession: vi.fn(),
+      addSession: vi.fn(),
+      removeSession: vi.fn(),
+    })
+
+    const ui = new OverviewUI(terminal as never, manager as never)
+    ui.show()
+
+    const nonEmptyLines = terminal.rendered
+      .split('\n')
+      .filter((line) => stripAnsi(line).length > 0)
+
+    expect(nonEmptyLines.every((line) => stripAnsi(line).startsWith(' '))).toBe(true)
   })
 
   it('下キーで見出しをまたいで次のセッションへ移動できる', () => {
