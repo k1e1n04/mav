@@ -2,14 +2,13 @@ import { EventEmitter } from 'node:events'
 import * as pty from 'node-pty'
 import type { AgentConfig } from './config.js'
 import { getProcessCwd } from './process-cwd.js'
-import { cleanupHookFiles, type RestoreFile } from './hook-injector.js'
+import { cleanupHookFiles } from './hook-injector.js'
 
 export type SessionStatus = 'running' | 'idle' | 'done' | 'error'
 
 export interface IpcContext {
   socketPath: string
   hookFiles: string[]
-  restoreFiles?: RestoreFile[]
 }
 
 const counters: Record<string, number> = {}
@@ -38,7 +37,6 @@ export class AgentSession extends EventEmitter {
   private displayNameLocked = false
   private initialInputBuffer = ''
   private hookFiles: string[] = []
-  private restoreFiles: RestoreFile[] = []
 
   constructor(config: AgentConfig, cols: number, rows: number, ipcContext?: IpcContext) {
     super()
@@ -56,7 +54,6 @@ export class AgentSession extends EventEmitter {
         env.MAV_SOCKET = ipcContext.socketPath
         env.MAV_SESSION_ID = this.id
         this.hookFiles = ipcContext.hookFiles
-        this.restoreFiles = ipcContext.restoreFiles ?? []
       }
       proc = pty.spawn(config.cmd, config.args, {
         name: 'xterm-256color',
@@ -70,7 +67,7 @@ export class AgentSession extends EventEmitter {
       this.exited = true
       this.status = 'error'
       this.logBuffer.push(`Error: failed to spawn '${config.cmd}': ${msg}\r\n`)
-      cleanupHookFiles(this.hookFiles, this.restoreFiles)
+      cleanupHookFiles(this.hookFiles)
       process.nextTick(() => this.emit('exit', 1))
       return
     }
@@ -88,7 +85,7 @@ export class AgentSession extends EventEmitter {
     this.ptyProcess.onExit(({ exitCode }) => {
       this.clearIdleTimer()
       this.clearCwdPollTimer()
-      cleanupHookFiles(this.hookFiles, this.restoreFiles)
+      cleanupHookFiles(this.hookFiles)
       this.setStatus(exitCode === 0 ? 'done' : 'error')
       this.exited = true
       this.ptyProcess = undefined

@@ -2,7 +2,7 @@ import type { SessionManager } from '../session-manager.js'
 import type { AgentSession } from '../agent.js'
 import type { AgentConfig } from '../config.js'
 import { getAgentDefaults, resolveSessionArgs } from '../agent-launch.js'
-import { buildHookArgs, type RestoreFile } from '../hook-injector.js'
+import { buildHookArgs } from '../hook-injector.js'
 import { completePath } from './path-completion.js'
 import type { KeyInfo, TerminalUI } from './terminal.js'
 
@@ -282,20 +282,18 @@ export class OverviewUI {
 
     let hookedArgs = args
     let hookFiles: string[] = []
-    let restoreFiles: RestoreFile[] = []
     if (this.socketPath) {
       try {
         const hookCmd = `mav report cwd "$(pwd)"`
         const hookResult = buildHookArgs(agentType, args, hookCmd, { cwd, cmd: defaults.cmd, settingsFile: config?.settingsFile })
         hookedArgs = hookResult.args
         hookFiles = hookResult.hookFiles
-        restoreFiles = hookResult.restoreFiles
       } catch {
         // hook injection failed — start agent without hooks
       }
     }
 
-    const ipcContext = this.socketPath ? { socketPath: this.socketPath, hookFiles, restoreFiles } : undefined
+    const ipcContext = this.socketPath ? { socketPath: this.socketPath, hookFiles } : undefined
     const session = this.manager.addSession({
       type: agentType,
       cmd: defaults.cmd,

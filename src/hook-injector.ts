@@ -1,22 +1,13 @@
 import { writeFileSync, readFileSync, existsSync, unlinkSync, mkdirSync } from 'node:fs'
-import { join, dirname } from 'node:path'
+import { join } from 'node:path'
 import { homedir, tmpdir } from 'node:os'
-import { randomUUID } from 'node:crypto'
-
-export interface RestoreFile {
-  /** Temp backup of the original content */
-  backupPath: string
-  /** The file that was modified and needs to be restored */
-  originalPath: string
-}
+import { randomUUID, createHash } from 'node:crypto'
 
 export interface HookInjectionResult {
   /** Injected startup args */
   args: string[]
   /** Temp file paths to delete on agent exit */
   hookFiles: string[]
-  /** Settings files that were modified in-place and need to be restored on exit */
-  restoreFiles: RestoreFile[]
 }
 
 interface BuildHookArgsOptions {
@@ -24,7 +15,13 @@ interface BuildHookArgsOptions {
   cwd?: string
   /** Actual command being invoked (e.g. 'claude-launcher' vs 'claude') */
   cmd?: string
-  /** Path to a settings file owned by a wrapper; mav merges hook there instead of passing --settings */
+  /**
+   * Path to the wrapper's settings overlay file.
+   * When specified for a wrapper cmd, mav reads this file before the wrapper runs,
+   * merges the PostToolUse hook into it, and passes the result as --settings <tempfile>.
+   * The wrapper sees --settings and skips its own overlay injection, but the temp file
+   * already contains the overlay content (apiKeyHelper etc.), so auth still works.
+   */
   settingsFile?: string
 }
 
@@ -49,7 +46,7 @@ export function buildHookArgs(
     case 'codex':
       return buildCodexHook(baseArgs, hookCommand)
     default:
-      return { args: baseArgs, hookFiles: [], restoreFiles: [] }
+      return { args: baseArgs, hookFiles: [] }
   }
 }
 
@@ -59,14 +56,14 @@ function buildClaudeCodeHook(
   cmd?: string,
   settingsFile?: string,
 ): HookInjectionResult {
-  // If a custom wrapper is used (e.g. claude-launcher), skip --settings injection.
+  // If a custom wrapper is used (e.g. claude-launcher), skip --settings <json> injection.
   // Wrappers detect --settings in their args and skip their own overlay (including
   // apiKeyHelper), which breaks authentication.
   if (cmd != null && cmd !== 'claude') {
     if (settingsFile) {
       return buildClaudeCodeHookViaFile(baseArgs, hookCommand, settingsFile)
     }
-    return { args: baseArgs, hookFiles: [], restoreFiles: [] }
+    return { args: baseArgs, hookFiles: [] }
   }
 
   const claudeSettingsPath = join(homedir(), '.claude', 'settings.json')
@@ -99,7 +96,6 @@ function buildClaudeCodeHook(
   return {
     args: [...baseArgs, '--settings', JSON.stringify(merged)],
     hookFiles: [],
-    restoreFiles: [],
   }
 }
 
@@ -110,19 +106,17 @@ function buildClaudeCodeHookViaFile(
 ): HookInjectionResult {
   const expandedPath = settingsFile.replace(/^~/, homedir())
 
-  let originalContent = '{}'
+  // Read the overlay file BEFORE the wrapper starts (and potentially overwrites it).
+  // The wrapper's overlay content (apiKeyHelper etc.) is preserved in the temp file,
+  // so even though the wrapper skips its own overlay injection, auth still works.
   let existing: Record<string, unknown> = {}
   if (existsSync(expandedPath)) {
     try {
-      originalContent = readFileSync(expandedPath, 'utf-8')
-      existing = JSON.parse(originalContent) as Record<string, unknown>
+      existing = JSON.parse(readFileSync(expandedPath, 'utf-8')) as Record<string, unknown>
     } catch {
-      // Unreadable/invalid JSON — treat as empty, preserve original bytes for restore
+      // Treat as empty
     }
   }
-
-  const backupPath = join(tmpdir(), `mav-settings-backup-${randomUUID()}.json`)
-  writeFileSync(backupPath, originalContent)
 
   const existingHooks = (existing.hooks ?? {}) as Record<string, unknown[]>
   const existingPostToolUse = (existingHooks.PostToolUse ?? []) as unknown[]
@@ -141,13 +135,15 @@ function buildClaudeCodeHookViaFile(
     },
   }
 
-  mkdirSync(dirname(expandedPath), { recursive: true })
-  writeFileSync(expandedPath, JSON.stringify(merged, null, 2))
+  // Use a deterministic name based on the settingsFile path so that at most one
+  // temp file exists per overlay path — crash leftovers get overwritten next run.
+  const pathHash = createHash('sha256').update(expandedPath).digest('hex').slice(0, 8)
+  const tempPath = join(tmpdir(), `mav-settings-${pathHash}.json`)
+  writeFileSync(tempPath, JSON.stringify(merged, null, 2))
 
   return {
-    args: baseArgs,
-    hookFiles: [],
-    restoreFiles: [{ backupPath, originalPath: expandedPath }],
+    args: [...baseArgs, '--settings', tempPath],
+    hookFiles: [tempPath],
   }
 }
 
@@ -168,11 +164,11 @@ function buildGeminiHook(
       const existing = JSON.parse(readFileSync(settingsPath, 'utf-8')) as Record<string, unknown>
       if (!existing[MAV_MARKER]) {
         // User-owned file — do not overwrite
-        return { args: baseArgs, hookFiles: [], restoreFiles: [] }
+        return { args: baseArgs, hookFiles: [] }
       }
     } catch {
       // Unreadable/invalid JSON — treat as user-owned and skip
-      return { args: baseArgs, hookFiles: [], restoreFiles: [] }
+      return { args: baseArgs, hookFiles: [] }
     }
     // File was written by mav (stale from crash) — overwrite below
   }
@@ -189,7 +185,7 @@ function buildGeminiHook(
   mkdirSync(geminiDir, { recursive: true })
   writeFileSync(settingsPath, JSON.stringify(settings, null, 2))
 
-  return { args: baseArgs, hookFiles: [settingsPath], restoreFiles: [] }
+  return { args: baseArgs, hookFiles: [settingsPath] }
 }
 
 function buildCodexHook(baseArgs: string[], hookCommand: string): HookInjectionResult {
@@ -209,7 +205,6 @@ function buildCodexHook(baseArgs: string[], hookCommand: string): HookInjectionR
   return {
     args: [...baseArgs, '--profile-v2', profileName],
     hookFiles: [tomlPath],
-    restoreFiles: [],
   }
 }
 
@@ -239,32 +234,19 @@ function buildCopilotHook(
   return {
     args: baseArgs,
     hookFiles: [hookPath],
-    restoreFiles: [],
   }
 }
 
 /**
- * Cleans up temp files generated by buildHookArgs.
- * - hookFiles: deleted
- * - restoreFiles: original content is restored from backup, then backup is deleted
+ * Deletes temp files generated by buildHookArgs.
  * Call this when the agent process exits.
  */
-export function cleanupHookFiles(hookFiles: string[], restoreFiles: RestoreFile[] = []): void {
+export function cleanupHookFiles(hookFiles: string[]): void {
   for (const f of hookFiles) {
     try {
       if (existsSync(f)) unlinkSync(f)
     } catch {
       // Ignore deletion failures (file may already be gone)
-    }
-  }
-  for (const { backupPath, originalPath } of restoreFiles) {
-    try {
-      if (existsSync(backupPath)) {
-        writeFileSync(originalPath, readFileSync(backupPath, 'utf-8'))
-        unlinkSync(backupPath)
-      }
-    } catch {
-      // Ignore restore failures
     }
   }
 }

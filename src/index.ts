@@ -8,7 +8,7 @@ import { App } from './ui/app.js'
 import type { AgentSession } from './agent.js'
 import { resolveSessionArgs } from './agent-launch.js'
 import { createServer } from './ipc-server.js'
-import { buildHookArgs, type RestoreFile } from './hook-injector.js'
+import { buildHookArgs } from './hook-injector.js'
 
 export interface StartOptions {
   configPath?: string
@@ -77,18 +77,16 @@ export function start(options: StartOptions = {}): SessionManager {
     const hookCmd = `mav report cwd "$(pwd)"`
     let hookedArgs = args
     let hookFiles: string[] = []
-    let restoreFiles: RestoreFile[] = []
     try {
       const hookResult = buildHookArgs(agentConfig.type, args, hookCmd, { cwd: restoredCwd, cmd: agentConfig.cmd, settingsFile: agentConfig.settingsFile })
       hookedArgs = hookResult.args
       hookFiles = hookResult.hookFiles
-      restoreFiles = hookResult.restoreFiles
     } catch {
       // hook file I/O failed — start agent without hooks
     }
     const session = manager.addSession(
       { ...agentConfig, args: hookedArgs, ...(restoredCwd != null && { cwd: restoredCwd }) },
-      { socketPath, hookFiles, restoreFiles },
+      { socketPath, hookFiles },
     ) as AgentSession & { sessionId?: string }
     session.baseArgs = agentConfig.args
     configSessionIds.add(session.id)
@@ -113,18 +111,16 @@ export function start(options: StartOptions = {}): SessionManager {
       const hookCmd = `mav report cwd "$(pwd)"`
       let hookedArgs = args
       let hookFiles: string[] = []
-      let restoreFiles: RestoreFile[] = []
       try {
         const hookResult = buildHookArgs(rc.type, args, hookCmd, { cwd: savedSession.cwd, cmd: rc.cmd })
         hookedArgs = hookResult.args
         hookFiles = hookResult.hookFiles
-        restoreFiles = hookResult.restoreFiles
       } catch {
         // hook file I/O failed — start agent without hooks
       }
       const session = manager.addSession(
         { type: rc.type, cmd: rc.cmd, args: hookedArgs, ...(savedSession.cwd != null && { cwd: savedSession.cwd }) },
-        { socketPath, hookFiles, restoreFiles },
+        { socketPath, hookFiles },
       ) as AgentSession & { sessionId?: string }
       session.baseArgs = rc.args
       if (newSessionId != null) {
