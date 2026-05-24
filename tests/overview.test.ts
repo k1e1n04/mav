@@ -122,6 +122,44 @@ describe('OverviewUI', () => {
     })
   })
 
+  it('n で追加したセッションは設定済みの cmd と args を優先する', () => {
+    const initialSession = { id: 'claude-code#1', displayName: 'claude-code 1', status: 'running', logBuffer: [], write: vi.fn() }
+    const addedSession = { id: 'claude-code#2', displayName: 'claude-code 2', status: 'running', logBuffer: [], write: vi.fn() }
+    const manager = Object.assign(new EventEmitter(), {
+      sessions: [initialSession],
+      selectedIndex: 0,
+      selectedSession: initialSession,
+      selectSession(index: number) {
+        this.selectedIndex = index
+        this.selectedSession = this.sessions[index] ?? null
+        this.emit('selection', this.selectedSession)
+      },
+      addSession: vi.fn(() => {
+        manager.sessions.push(addedSession)
+        return addedSession
+      }),
+      removeSession: vi.fn(),
+    })
+
+    const ui = new OverviewUI(
+      terminal as never,
+      manager as never,
+      undefined,
+      [{ type: 'claude-code', cmd: 'claude-launcher', args: ['--dangerously-skip-permissions'] }],
+    )
+    ui.show()
+    ui.handleKeypress('n', key('n'))
+    ui.handleKeypress('', key('enter'))
+    ui.handleKeypress('', key('enter'))
+
+    expect(manager.addSession).toHaveBeenCalledWith({
+      type: 'claude-code',
+      cmd: 'claude-launcher',
+      args: ['--dangerously-skip-permissions', '--session-id', expect.any(String)],
+      cwd: process.cwd(),
+    })
+  })
+
   it('n で追加したセッションは process.cwd() を cwd として起動する', () => {
     const initialSession = { id: 'claude-code#1', displayName: 'claude-code 1', status: 'running', logBuffer: [], write: vi.fn() }
     const addedSession = { id: 'codex#1', displayName: 'codex 1', status: 'running', logBuffer: [], write: vi.fn(), cwd: '/tmp/project-a' }

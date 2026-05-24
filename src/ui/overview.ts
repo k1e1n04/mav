@@ -1,5 +1,6 @@
 import type { SessionManager } from '../session-manager.js'
 import type { AgentSession } from '../agent.js'
+import type { AgentConfig } from '../config.js'
 import { getAgentDefaults, resolveSessionArgs } from '../agent-launch.js'
 import { completePath } from './path-completion.js'
 import type { KeyInfo, TerminalUI } from './terminal.js'
@@ -36,6 +37,7 @@ export class OverviewUI {
   private terminal: TerminalUI
   private manager: SessionManager
   private onSessionCreated?: (session: SessionManager['selectedSession']) => void
+  private agentConfigs: AgentConfig[]
   private promptState: PromptState = null
   private displaySessionIds: string[] = []
   private visible = false
@@ -43,11 +45,13 @@ export class OverviewUI {
   constructor(
     terminal: TerminalUI,
     manager: SessionManager,
-    onSessionCreated?: (session: SessionManager['selectedSession']) => void
+    onSessionCreated?: (session: SessionManager['selectedSession']) => void,
+    agentConfigs: AgentConfig[] = [],
   ) {
     this.terminal = terminal
     this.manager = manager
     this.onSessionCreated = onSessionCreated
+    this.agentConfigs = agentConfigs
 
     this.syncList()
 
@@ -205,7 +209,11 @@ export class OverviewUI {
   }
 
   private spawnAgent(agentType: string, cwd: string): void {
-    const defaults = getAgentDefaults(agentType)
+    const config = this.agentConfigs.find((candidate) => candidate.type === agentType)
+    const defaults = config ?? {
+      type: agentType,
+      ...getAgentDefaults(agentType),
+    }
     const { args, newSessionId } = resolveSessionArgs(agentType, defaults.args, undefined, false)
     const session = this.manager.addSession({
       type: agentType,

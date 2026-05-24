@@ -32,7 +32,7 @@ export function start(options: StartOptions = {}): SessionManager {
   const savedState = loadState(statePath)
 
   const manager = new SessionManager()
-  const app = new App(manager, statePath)
+  const app = new App(manager, statePath, undefined, config.agents)
   const publishSelectedSession = () => {
     const session = manager.selectedSession
     if (!session) {

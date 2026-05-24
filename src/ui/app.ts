@@ -1,4 +1,5 @@
 import type { AgentSession } from '../agent.js'
+import type { AgentConfig } from '../config.js'
 import type { SessionManager } from '../session-manager.js'
 import { saveState } from '../state.js'
 import { DetailUI } from './detail.js'
@@ -16,7 +17,12 @@ export class App {
   private detailUI: DetailUI
   private mode: Mode = 'overview'
 
-  constructor(manager: SessionManager, statePath: string, terminal = new TerminalUI()) {
+  constructor(
+    manager: SessionManager,
+    statePath: string,
+    terminal = new TerminalUI(),
+    agentConfigs: AgentConfig[] = [],
+  ) {
     this.manager = manager
     this.statePath = statePath
     this.terminal = terminal
@@ -25,7 +31,7 @@ export class App {
       if (session) {
         this.switchToDetail(session)
       }
-    })
+    }, agentConfigs)
     this.detailUI = new DetailUI(terminal, () => {
       if (this.mode === 'detail') {
         this.switchToOverview()
