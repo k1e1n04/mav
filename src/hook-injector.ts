@@ -1,4 +1,4 @@
-import { writeFileSync, existsSync, unlinkSync, mkdirSync } from 'node:fs'
+import { writeFileSync, readFileSync, existsSync, unlinkSync, mkdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { homedir } from 'node:os'
 import { randomUUID } from 'node:crypto'
@@ -55,6 +55,8 @@ function buildClaudeCodeHook(baseArgs: string[], hookCommand: string): HookInjec
   }
 }
 
+const MAV_MARKER = '_mavGenerated'
+
 function buildGeminiHook(
   baseArgs: string[],
   hookCommand: string,
@@ -64,18 +66,26 @@ function buildGeminiHook(
   const geminiDir = join(projectDir, '.gemini')
   const settingsPath = join(geminiDir, 'settings.local.json')
 
-  // Skip writing if the file already exists to protect the user's existing config
+  // If the file exists and was NOT written by mav, skip to protect user's config
   if (existsSync(settingsPath)) {
-    return { args: baseArgs, hookFiles: [] }
+    try {
+      const existing = JSON.parse(readFileSync(settingsPath, 'utf-8')) as Record<string, unknown>
+      if (!existing[MAV_MARKER]) {
+        // User-owned file — do not overwrite
+        return { args: baseArgs, hookFiles: [] }
+      }
+    } catch {
+      // Unreadable/invalid JSON — treat as user-owned and skip
+      return { args: baseArgs, hookFiles: [] }
+    }
+    // File was written by mav (stale from crash) — overwrite below
   }
 
   const settings = {
+    [MAV_MARKER]: true,
     hooks: {
       AfterTool: [
-        {
-          matcher: '',
-          hooks: [{ type: 'command', command: hookCommand }],
-        },
+        { matcher: '', hooks: [{ type: 'command', command: hookCommand }] },
       ],
     },
   }

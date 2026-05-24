@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { existsSync, readFileSync, rmSync } from 'node:fs'
+import { existsSync, readFileSync, writeFileSync, mkdirSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 
 const { buildHookArgs, cleanupHookFiles } = await import('../src/hook-injector.js')
@@ -33,6 +33,41 @@ describe('hook-injector: gemini-cli', () => {
 
     // Cleanup
     cleanupHookFiles(hookFiles)
+  })
+
+  it('_mavGenerated マーカーがある古いファイルは上書きして再注入する', () => {
+    const cwd = '/tmp/test-project'
+    const settingsPath = join(cwd, '.gemini', 'settings.local.json')
+
+    // Simulate a stale file written by mav
+    mkdirSync(join(cwd, '.gemini'), { recursive: true })
+    writeFileSync(settingsPath, JSON.stringify({ _mavGenerated: true, hooks: {} }))
+
+    const { hookFiles } = buildHookArgs('gemini-cli', [], 'mav report cwd "$(pwd)"', { cwd })
+    expect(hookFiles).toHaveLength(1)  // Was reinjected
+
+    // Cleanup
+    cleanupHookFiles(hookFiles)
+  })
+
+  it('ユーザーが所有する settings.local.json は上書きしない', () => {
+    const cwd = '/tmp/test-project'
+    const settingsPath = join(cwd, '.gemini', 'settings.local.json')
+
+    // Simulate user-owned file (no marker)
+    mkdirSync(join(cwd, '.gemini'), { recursive: true })
+    writeFileSync(settingsPath, JSON.stringify({ hooks: { myHook: [] } }))
+
+    const { hookFiles } = buildHookArgs('gemini-cli', [], 'mav report cwd "$(pwd)"', { cwd })
+    expect(hookFiles).toHaveLength(0)  // Skipped
+
+    // Verify user file content is unchanged
+    const content = JSON.parse(readFileSync(settingsPath, 'utf-8'))
+    expect(content._mavGenerated).toBeUndefined()
+    expect(content.hooks.myHook).toBeDefined()
+
+    // Cleanup
+    rmSync(settingsPath)
   })
 })
 
