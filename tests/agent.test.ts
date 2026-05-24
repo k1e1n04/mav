@@ -339,3 +339,61 @@ describe('AgentSession — ID', () => {
     expect(n2).toBe(n1 + 1)
   })
 })
+
+describe('AgentSession — IPC env injection', () => {
+  let onDataCb: ((data: string) => void) | undefined
+  let onExitCb: ((e: { exitCode: number }) => void) | undefined
+
+  beforeEach(() => {
+    vi.useFakeTimers()
+    vi.clearAllMocks()
+    getProcessCwdMock.mockReturnValue(null)
+    getMockPty().onData.mockImplementation((cb: (data: string) => void) => { onDataCb = cb })
+    getMockPty().onExit.mockImplementation((cb: (e: { exitCode: number }) => void) => { onExitCb = cb })
+  })
+
+  it('MAV_SOCKET と MAV_SESSION_ID を env に注入する', () => {
+    const spawnMock = vi.mocked((nodePty as unknown as { spawn: ReturnType<typeof vi.fn> }).spawn)
+    spawnMock.mockClear()
+
+    new AgentSession(
+      { type: 'claude-code', cmd: 'claude', args: [] },
+      80, 24,
+      { socketPath: '/tmp/mav-test.sock', hookFiles: [] },
+    )
+
+    const spawnCall = spawnMock.mock.calls[0]
+    const env = spawnCall?.[2]?.env as Record<string, string>
+    expect(env.MAV_SOCKET).toBe('/tmp/mav-test.sock')
+    expect(env.MAV_SESSION_ID).toMatch(/^claude-code#\d+$/)
+  })
+
+  it('IpcContext なしの場合は MAV_SOCKET を注入しない', () => {
+    const spawnMock = vi.mocked((nodePty as unknown as { spawn: ReturnType<typeof vi.fn> }).spawn)
+    spawnMock.mockClear()
+
+    new AgentSession(
+      { type: 'claude-code', cmd: 'claude', args: [] },
+      80, 24,
+    )
+
+    const spawnCall = spawnMock.mock.calls[0]
+    const env = spawnCall?.[2]?.env as Record<string, string>
+    expect(env.MAV_SOCKET).toBeUndefined()
+  })
+
+  it('notifyCwd() で cwd を更新して cwd イベントを発火する', () => {
+    const s = new AgentSession(
+      { type: 'claude-code', cmd: 'claude', args: [] },
+      80, 24,
+      { socketPath: '/tmp/mav-test.sock', hookFiles: [] },
+    )
+    const handler = vi.fn()
+    s.on('cwd', handler)
+
+    s.notifyCwd('/new/path')
+
+    expect(s.cwd).toBe('/new/path')
+    expect(handler).toHaveBeenCalledWith('/new/path')
+  })
+})

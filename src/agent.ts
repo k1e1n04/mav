@@ -2,8 +2,14 @@ import { EventEmitter } from 'node:events'
 import * as pty from 'node-pty'
 import type { AgentConfig } from './config.js'
 import { getProcessCwd } from './process-cwd.js'
+import { cleanupHookFiles } from './hook-injector.js'
 
 export type SessionStatus = 'running' | 'idle' | 'done' | 'error'
+
+export interface IpcContext {
+  socketPath: string
+  hookFiles: string[]
+}
 
 const counters: Record<string, number> = {}
 
@@ -30,8 +36,9 @@ export class AgentSession extends EventEmitter {
   private cwdPollTimer: ReturnType<typeof setInterval> | null = null
   private displayNameLocked = false
   private initialInputBuffer = ''
+  private hookFiles: string[] = []
 
-  constructor(config: AgentConfig, cols: number, rows: number) {
+  constructor(config: AgentConfig, cols: number, rows: number, ipcContext?: IpcContext) {
     super()
     counters[config.type] = (counters[config.type] ?? 0) + 1
     this.id = `${config.type}#${counters[config.type]}`
@@ -42,12 +49,18 @@ export class AgentSession extends EventEmitter {
 
     let proc: pty.IPty
     try {
+      const env: Record<string, string> = { ...(process.env as Record<string, string>) }
+      if (ipcContext) {
+        env.MAV_SOCKET = ipcContext.socketPath
+        env.MAV_SESSION_ID = this.id
+        this.hookFiles = ipcContext.hookFiles
+      }
       proc = pty.spawn(config.cmd, config.args, {
         name: 'xterm-256color',
         cols,
         rows,
         cwd: this.cwd,
-        env: process.env as Record<string, string>,
+        env,
       })
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
@@ -71,6 +84,7 @@ export class AgentSession extends EventEmitter {
     this.ptyProcess.onExit(({ exitCode }) => {
       this.clearIdleTimer()
       this.clearCwdPollTimer()
+      cleanupHookFiles(this.hookFiles)
       this.setStatus(exitCode === 0 ? 'done' : 'error')
       this.exited = true
       this.ptyProcess = undefined
@@ -114,6 +128,11 @@ export class AgentSession extends EventEmitter {
   resize(cols: number, rows: number): void {
     if (this.exited) return
     this.ptyProcess?.resize(cols, rows)
+  }
+
+  /** Update cwd via IPC notification */
+  notifyCwd(newCwd: string): void {
+    this.updateCwd(newCwd)
   }
 
   private appendLog(chunk: string): void {
