@@ -537,6 +537,7 @@ describe('OverviewUI', () => {
       selectSession(index: number) {
         this.selectedIndex = index
         this.selectedSession = this.sessions[index] ?? null
+        this.emit('selection', this.selectedSession)
       },
       addSession: vi.fn(),
       removeSession: vi.fn(),
@@ -562,6 +563,7 @@ describe('OverviewUI', () => {
       selectSession(index: number) {
         this.selectedIndex = index
         this.selectedSession = this.sessions[index] ?? null
+        this.emit('selection', this.selectedSession)
       },
       addSession: vi.fn(),
       removeSession: vi.fn(),
@@ -588,6 +590,7 @@ describe('OverviewUI', () => {
       selectSession(index: number) {
         this.selectedIndex = index
         this.selectedSession = this.sessions[index] ?? null
+        this.emit('selection', this.selectedSession)
       },
       addSession: vi.fn(),
       removeSession: vi.fn(),
@@ -614,6 +617,7 @@ describe('OverviewUI', () => {
       selectSession(index: number) {
         this.selectedIndex = index
         this.selectedSession = this.sessions[index] ?? null
+        this.emit('selection', this.selectedSession)
       },
       addSession: vi.fn(),
       removeSession: vi.fn(),

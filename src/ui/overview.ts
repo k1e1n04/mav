@@ -47,7 +47,9 @@ export class OverviewUI {
         selected: { bg: 'blue', fg: 'white' },
         border: { fg: 'cyan' },
       },
-      keys: true,
+      // keys: true を設定すると blessed 組み込みの up()/down() もカスタムハンドラーと
+      // 同時に実行され、selected がヘッダー行（cwd名やステータスグループ名）に一時的に
+      // 移動してしまう競合が起きる。矢印キーはカスタムハンドラーのみで処理する。
       mouse: true,
     })
 
@@ -90,15 +92,15 @@ export class OverviewUI {
     this.listBox.key(['up', 'k'], () => {
       if (this.manager.sessions.length === 0) return
       this.moveSelection(-1)
-      this.syncList()
-      this.screen.render()
+      // syncList() と screen.render() は moveSelection() → selectSession() →
+      // emitSelection() → 'selection' イベント経由で自動的に呼ばれる
     })
 
     this.listBox.key(['down', 'j'], () => {
       if (this.manager.sessions.length === 0) return
       this.moveSelection(1)
-      this.syncList()
-      this.screen.render()
+      // syncList() と screen.render() は moveSelection() → selectSession() →
+      // emitSelection() → 'selection' イベント経由で自動的に呼ばれる
     })
 
     this.listBox.key('n', () => {
