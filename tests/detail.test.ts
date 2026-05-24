@@ -33,10 +33,12 @@ describe('DetailUI', () => {
     })
 
     ui = new DetailUI({
-      program: {
-        input,
-        output: { write: outputWrite },
+      onData(handler: (chunk: string | Buffer) => void) {
+        input.on('data', handler)
+        return () => input.off('data', handler)
       },
+      write: outputWrite,
+      clearScreen: vi.fn(),
     } as never, onExitDetail)
   })
 

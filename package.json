@@ -1,6 +1,6 @@
 {
   "name": "@k1e1n04/mav",
-  "version": "0.1.7",
+  "version": "0.1.19",
   "description": "Multi-agent view — manage multiple AI CLI sessions in one terminal",
   "type": "module",
   "bin": {
@@ -35,9 +35,7 @@
   "dependencies": {
     "commander": "13.1.0",
     "js-yaml": "4.1.0",
-    "neo-blessed": "0.2.0",
-    "node-pty": "1.0.0",
-    "term.js": "^0.0.7"
+    "node-pty": "1.0.0"
   },
   "pnpm": {
     "onlyBuiltDependencies": [
@@ -46,7 +44,6 @@
     ]
   },
   "devDependencies": {
-    "@types/blessed": "^0.1.27",
     "@types/js-yaml": "4.0.9",
     "@types/node": "22.15.21",
     "tsx": "4.19.3",

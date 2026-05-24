@@ -1,100 +1,58 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-type KeyHandler = () => void
+type KeyHandler = (str: string, key: { name?: string; ctrl?: boolean; sequence?: string }) => void
 
 const {
-  screenKeyHandlers,
-  screenOnHandlers,
-  screenRenderMock,
-  screenDestroyMock,
+  keypressHandlers,
+  resizeHandlers,
   overviewShowMock,
   overviewHideMock,
   overviewResizeSelectedSessionMock,
+  overviewHandleKeypressMock,
   detailShowMock,
   detailHideMock,
   detailAttachMock,
   detailDetachMock,
   detailResizeMock,
   killAllMock,
-  screenState,
-  triggerExitDetail,
-  setExitDetailHandler,
-  overviewCtorArgs,
+  triggerOverviewSessionCreated,
   saveStateMock,
 } = vi.hoisted(() => {
-  let onExitDetailHandler: (() => void) | null = null
+  let onSessionCreated: ((session: unknown) => void) | null = null
   return {
-    screenKeyHandlers: new Map<string, KeyHandler>(),
-    screenOnHandlers: new Map<string, () => void>(),
-    screenRenderMock: vi.fn(),
-    screenDestroyMock: vi.fn(),
+    keypressHandlers: [] as KeyHandler[],
+    resizeHandlers: [] as (() => void)[],
     overviewShowMock: vi.fn(),
     overviewHideMock: vi.fn(),
     overviewResizeSelectedSessionMock: vi.fn(),
+    overviewHandleKeypressMock: vi.fn(),
     detailShowMock: vi.fn(),
     detailHideMock: vi.fn(),
     detailAttachMock: vi.fn(),
     detailDetachMock: vi.fn(),
     detailResizeMock: vi.fn(),
     killAllMock: vi.fn(),
-    screenState: {
-      current: null as {
-        program: {
-          disableMouse: ReturnType<typeof vi.fn>
-          enableMouse: ReturnType<typeof vi.fn>
-          normalBuffer: ReturnType<typeof vi.fn>
-          alternateBuffer: ReturnType<typeof vi.fn>
-        }
-        realloc: ReturnType<typeof vi.fn>
-      } | null,
-    },
-    overviewCtorArgs: [] as unknown[][],
-    setExitDetailHandler: (handler: () => void) => {
-      onExitDetailHandler = handler
-    },
-    triggerExitDetail: () => {
-      onExitDetailHandler?.()
-    },
     saveStateMock: vi.fn(),
+    triggerOverviewSessionCreated: (session: unknown) => {
+      onSessionCreated?.(session)
+    },
+    setOverviewSessionCreated: (handler: (session: unknown) => void) => {
+      onSessionCreated = handler
+    },
   }
 })
 
-vi.mock('neo-blessed', () => ({
-  default: {
-    screen: vi.fn(() => {
-      screenState.current = {
-        width: 120,
-        height: 40,
-        key(keys: string | string[], handler: KeyHandler) {
-          for (const key of Array.isArray(keys) ? keys : [keys]) {
-            screenKeyHandlers.set(key, handler)
-          }
-        },
-        on(event: string, handler: () => void) {
-          screenOnHandlers.set(event, handler)
-        },
-        render: screenRenderMock,
-        destroy: screenDestroyMock,
-        program: {
-          disableMouse: vi.fn(),
-          enableMouse: vi.fn(),
-          normalBuffer: vi.fn(),
-          alternateBuffer: vi.fn(),
-        },
-        realloc: vi.fn(),
-      } as never
-      return screenState.current
-    }),
-  },
-}))
-
 vi.mock('../src/ui/overview.js', () => ({
   OverviewUI: class {
-    constructor(...args: unknown[]) {
-      overviewCtorArgs.push(args)
+    constructor(_terminal: unknown, _manager: unknown, onSessionCreated: (session: unknown) => void) {
+      ;(globalThis as unknown as { __setOverviewSessionCreated?: (handler: (session: unknown) => void) => void })
+        .__setOverviewSessionCreated?.(onSessionCreated)
     }
     isPromptOpen() {
       return false
+    }
+    handleKeypress(str: string, key: unknown) {
+      overviewHandleKeypressMock(str, key)
     }
     show() {
       overviewShowMock()
@@ -110,9 +68,7 @@ vi.mock('../src/ui/overview.js', () => ({
 
 vi.mock('../src/ui/detail.js', () => ({
   DetailUI: class {
-    constructor(_screen: unknown, onExitDetail: () => void) {
-      setExitDetailHandler(onExitDetail)
-    }
+    constructor() {}
     attach(session: unknown) {
       detailAttachMock(session)
     }
@@ -137,206 +93,147 @@ vi.mock('../src/state.js', () => ({
 
 import { App } from '../src/ui/app.js'
 
+function makeTerminal() {
+  return {
+    cols: 120,
+    rows: 40,
+    onKeypress(handler: KeyHandler) {
+      keypressHandlers.push(handler)
+      return () => {}
+    },
+    onResize(handler: () => void) {
+      resizeHandlers.push(handler)
+      return () => {}
+    },
+    enterAlternateScreen: vi.fn(),
+    exitAlternateScreen: vi.fn(),
+    destroy: vi.fn(),
+  }
+}
+
 describe('App', () => {
   beforeEach(() => {
-    screenKeyHandlers.clear()
-    screenOnHandlers.clear()
-    overviewCtorArgs.length = 0
-    screenState.current = null
+    keypressHandlers.length = 0
+    resizeHandlers.length = 0
     vi.clearAllMocks()
+    ;(globalThis as unknown as { __setOverviewSessionCreated?: (handler: (session: unknown) => void) => void })
+      .__setOverviewSessionCreated = (handler) => {
+        ;(triggerOverviewSessionCreated as unknown as { handler?: (session: unknown) => void }).handler = handler
+      }
   })
+
+  function emitKey(str: string, key: { name?: string; ctrl?: boolean; sequence?: string } = {}) {
+    for (const handler of keypressHandlers) {
+      handler(str, { sequence: str, ...key })
+    }
+  }
 
   it('overviewでEnterすると詳細モードに入る', () => {
     const selectedSession = { id: 'claude-code#1', resize: vi.fn() }
-    const manager = {
-      sessions: [selectedSession],
-      selectedSession,
-      killAll: killAllMock,
-    }
+    const manager = { sessions: [selectedSession], selectedSession, killAll: killAllMock }
+    const terminal = makeTerminal()
 
-    new App(manager as never)
+    new App(manager as never, '/tmp/state.json', terminal as never)
 
-    screenKeyHandlers.get('enter')?.()
+    emitKey('', { name: 'enter' })
 
     expect(overviewHideMock).toHaveBeenCalledTimes(1)
     expect(detailAttachMock).toHaveBeenCalledWith(selectedSession)
     expect(detailShowMock).toHaveBeenCalledTimes(1)
+    expect(terminal.exitAlternateScreen).toHaveBeenCalledTimes(1)
   })
 
-  it('overviewからdetailへ入る時は端末のnormal bufferへ戻す', () => {
+  it('detailからoverviewへ戻るとalternate screenへ入る', () => {
     const selectedSession = { id: 'claude-code#1', resize: vi.fn() }
-    const manager = {
-      sessions: [selectedSession],
-      selectedSession,
-      killAll: killAllMock,
-    }
+    const manager = { sessions: [selectedSession], selectedSession, killAll: killAllMock }
+    const terminal = makeTerminal()
+    const app = new App(manager as never, '/tmp/state.json', terminal as never)
 
-    new App(manager as never)
-
-    screenKeyHandlers.get('enter')?.()
-
-    expect(screenState.current?.program.normalBuffer).toHaveBeenCalledTimes(1)
-  })
-
-  it('overviewからdetailへ入る時はmouse trackingを無効化する', () => {
-    const selectedSession = { id: 'claude-code#1', resize: vi.fn() }
-    const manager = {
-      sessions: [selectedSession],
-      selectedSession,
-      killAll: killAllMock,
-    }
-
-    new App(manager as never)
-
-    screenKeyHandlers.get('enter')?.()
-
-    expect(screenState.current?.program.disableMouse).toHaveBeenCalledTimes(1)
-  })
-
-  it('overviewからdetailへ入る時は選択セッションをフルスクリーン寸法へresizeする', () => {
-    const selectedSession = { id: 'claude-code#1', resize: vi.fn() }
-    const manager = {
-      sessions: [selectedSession],
-      selectedSession,
-      killAll: killAllMock,
-    }
-
-    new App(manager as never)
-
-    screenKeyHandlers.get('enter')?.()
-
-    expect(detailResizeMock).toHaveBeenCalledWith(120, 40)
-  })
-
-  it('detailでCtrl+]相当の終了コールバックが走るとoverviewに戻る', () => {
-    const selectedSession = { id: 'claude-code#1', resize: vi.fn() }
-    const manager = {
-      sessions: [selectedSession],
-      selectedSession,
-      killAll: killAllMock,
-    }
-
-    new App(manager as never)
-
-    screenKeyHandlers.get('enter')?.()
-    triggerExitDetail()
+    emitKey('', { name: 'enter' })
+    ;(app as never).switchToOverview()
 
     expect(detailDetachMock).toHaveBeenCalledTimes(1)
     expect(detailHideMock).toHaveBeenCalledTimes(1)
-    expect(screenState.current?.program.enableMouse).toHaveBeenCalledTimes(1)
-    expect(overviewShowMock).toHaveBeenCalledTimes(1)
+    expect(terminal.enterAlternateScreen).toHaveBeenCalled()
+    expect(overviewShowMock).toHaveBeenCalled()
   })
 
-  it('overviewで新規セッション作成コールバックを受けるとそのセッション詳細へ移動する', () => {
-    const initialSession = { id: 'claude-code#1', resize: vi.fn() }
-    const addedSession = { id: 'codex#1', resize: vi.fn() }
-    const manager = {
-      sessions: [initialSession, addedSession],
-      selectedSession: initialSession,
-      killAll: killAllMock,
-    }
-
-    new App(manager as never)
-
-    const onSessionCreated = overviewCtorArgs[0]?.[2] as ((session: unknown) => void) | undefined
-    expect(onSessionCreated).toBeTypeOf('function')
-
-    onSessionCreated?.(addedSession)
-
-    expect(overviewHideMock).toHaveBeenCalledTimes(1)
-    expect(detailAttachMock).toHaveBeenCalledWith(addedSession)
-    expect(detailShowMock).toHaveBeenCalledTimes(1)
-  })
-
-  it('overview中のscreen resizeではpreviewを再描画する', () => {
+  it('overview中のresizeではoverviewを再描画する', () => {
     const selectedSession = { id: 'claude-code#1', resize: vi.fn() }
-    const manager = {
-      sessions: [selectedSession],
-      selectedSession,
-      killAll: killAllMock,
-    }
+    const manager = { sessions: [selectedSession], selectedSession, killAll: killAllMock }
+    const terminal = makeTerminal()
 
-    new App(manager as never)
-
-    screenOnHandlers.get('resize')?.()
+    new App(manager as never, '/tmp/state.json', terminal as never)
+    resizeHandlers[0]?.()
 
     expect(overviewResizeSelectedSessionMock).toHaveBeenCalledTimes(1)
     expect(detailResizeMock).not.toHaveBeenCalled()
   })
 
-  it('overview中のscreen resizeではscreen.render()を呼ぶ', () => {
+  it('detail中のresizeではフルスクリーン寸法へ再調整する', () => {
     const selectedSession = { id: 'claude-code#1', resize: vi.fn() }
-    const manager = {
-      sessions: [selectedSession],
-      selectedSession,
-      killAll: killAllMock,
-    }
+    const manager = { sessions: [selectedSession], selectedSession, killAll: killAllMock }
+    const terminal = makeTerminal()
 
-    new App(manager as never)
-    vi.clearAllMocks()
-
-    screenOnHandlers.get('resize')?.()
-
-    expect(screenRenderMock).toHaveBeenCalledTimes(1)
-  })
-
-  it('detail中のscreen resizeではフルスクリーン寸法へ再調整する', () => {
-    const selectedSession = { id: 'claude-code#1', resize: vi.fn() }
-    const manager = {
-      sessions: [selectedSession],
-      selectedSession,
-      killAll: killAllMock,
-    }
-
-    new App(manager as never)
-
-    screenKeyHandlers.get('enter')?.()
-    screenOnHandlers.get('resize')?.()
+    new App(manager as never, '/tmp/state.json', terminal as never)
+    emitKey('', { name: 'enter' })
+    resizeHandlers[0]?.()
 
     expect(detailResizeMock).toHaveBeenCalledWith(120, 40)
   })
 
+  it('overviewで新規セッション作成コールバックを受けるとそのセッション詳細へ移動する', () => {
+    const initialSession = { id: 'claude-code#1', resize: vi.fn() }
+    const addedSession = { id: 'codex#1', resize: vi.fn() }
+    const manager = { sessions: [initialSession, addedSession], selectedSession: initialSession, killAll: killAllMock }
+    const terminal = makeTerminal()
+
+    new App(manager as never, '/tmp/state.json', terminal as never)
+    ;(triggerOverviewSessionCreated as unknown as { handler?: (session: unknown) => void }).handler?.(addedSession)
+
+    expect(detailAttachMock).toHaveBeenCalledWith(addedSession)
+    expect(detailShowMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('overviewの未処理キーはOverviewUIへ委譲する', () => {
+    const selectedSession = { id: 'claude-code#1', resize: vi.fn() }
+    const manager = { sessions: [selectedSession], selectedSession, killAll: killAllMock }
+    const terminal = makeTerminal()
+
+    new App(manager as never, '/tmp/state.json', terminal as never)
+    emitKey('j', { name: 'j' })
+
+    expect(overviewHandleKeypressMock).toHaveBeenCalledWith('j', expect.objectContaining({ name: 'j' }))
+  })
+
   it('overviewでq押下時にsaveStateが失敗しても終了処理を続行する', () => {
     const exitSpy = vi.spyOn(process, 'exit').mockImplementation((() => undefined) as never)
-    const manager = {
-      sessions: [],
-      selectedSession: null,
-      killAll: killAllMock,
-    }
+    const manager = { sessions: [], selectedSession: null, killAll: killAllMock }
+    const terminal = makeTerminal()
     saveStateMock.mockImplementationOnce(() => {
       throw new Error('disk full')
     })
 
-    new App(manager as never, '/tmp/state.json')
-
-    screenKeyHandlers.get('q')?.()
+    new App(manager as never, '/tmp/state.json', terminal as never)
+    emitKey('q', { name: 'q' })
 
     expect(killAllMock).toHaveBeenCalledTimes(1)
-    expect(screenDestroyMock).toHaveBeenCalledTimes(1)
+    expect(terminal.destroy).toHaveBeenCalledTimes(1)
     expect(exitSpy).toHaveBeenCalledWith(0)
-
     exitSpy.mockRestore()
   })
 
-  it('overviewでCtrl+C押下時にsaveStateが失敗しても終了処理を続行する', () => {
+  it('overviewでCtrl+C押下時に終了処理を続行する', () => {
     const exitSpy = vi.spyOn(process, 'exit').mockImplementation((() => undefined) as never)
-    const manager = {
-      sessions: [],
-      selectedSession: null,
-      killAll: killAllMock,
-    }
-    saveStateMock.mockImplementationOnce(() => {
-      throw new Error('permission denied')
-    })
+    const manager = { sessions: [], selectedSession: null, killAll: killAllMock }
+    const terminal = makeTerminal()
 
-    new App(manager as never, '/tmp/state.json')
-
-    screenKeyHandlers.get('C-c')?.()
+    new App(manager as never, '/tmp/state.json', terminal as never)
+    emitKey('\x03', { name: 'c', ctrl: true })
 
     expect(killAllMock).toHaveBeenCalledTimes(1)
-    expect(screenDestroyMock).toHaveBeenCalledTimes(1)
+    expect(terminal.destroy).toHaveBeenCalledTimes(1)
     expect(exitSpy).toHaveBeenCalledWith(0)
-
     exitSpy.mockRestore()
   })
 })

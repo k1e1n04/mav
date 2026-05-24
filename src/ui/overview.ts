@@ -1,59 +1,52 @@
-import blessed from 'neo-blessed'
-import type { Widgets } from 'neo-blessed'
 import type { SessionManager } from '../session-manager.js'
 import type { AgentSession } from '../agent.js'
 import { getAgentDefaults, resolveSessionArgs } from '../agent-launch.js'
 import { completePath } from './path-completion.js'
+import type { KeyInfo, TerminalUI } from './terminal.js'
+
+type PromptState =
+  | { mode: 'agent'; selectedIndex: number }
+  | { mode: 'cwd'; agentType: string; value: string; candidates: string[] }
+  | { mode: 'error'; message: string }
+  | null
 
 export class OverviewUI {
+  private static readonly ANSI = {
+    reset: '\x1b[0m',
+    bold: '\x1b[1m',
+    dim: '\x1b[2m',
+    fgSlate: '\x1b[38;5;245m',
+    fgGreen: '\x1b[38;5;42m',
+    fgAmber: '\x1b[38;5;221m',
+    fgCyan: '\x1b[38;5;81m',
+    fgRed: '\x1b[38;5;203m',
+  } as const
+
   private static readonly STATUS_GROUPS = [
     { status: 'running', label: 'Working' },
     { status: 'idle', label: 'Waiting' },
     { status: 'done', label: 'Complete' },
     { status: 'error', label: 'Failed' },
   ] as const
-  private static readonly STATUS_COLORS = {
-    running: 'cyan',
-    idle: 'yellow',
-    done: 'green',
-    error: 'red',
-  } as const
 
-  private screen: Widgets.Screen
+  private static readonly AGENT_TYPES = ['claude-code', 'codex', 'gemini-cli', 'copilot'] as const
+
+  private terminal: TerminalUI
   private manager: SessionManager
   private onSessionCreated?: (session: SessionManager['selectedSession']) => void
-  private listBox: Widgets.ListElement
-  private promptOpen = false
+  private promptState: PromptState = null
+  private displaySessionIds: string[] = []
+  private visible = false
 
   constructor(
-    screen: Widgets.Screen,
+    terminal: TerminalUI,
     manager: SessionManager,
     onSessionCreated?: (session: SessionManager['selectedSession']) => void
   ) {
-    this.screen = screen
+    this.terminal = terminal
     this.manager = manager
     this.onSessionCreated = onSessionCreated
 
-    this.listBox = blessed.list({
-      parent: screen,
-      top: 0,
-      left: 0,
-      width: '100%',
-      height: '100%',
-      border: { type: 'line' },
-      label: ' AGENTS ',
-      tags: true,
-      style: {
-        selected: { bg: 'blue', fg: 'white' },
-        border: { fg: 'cyan' },
-      },
-      // keys: true を設定すると blessed 組み込みの up()/down() もカスタムハンドラーと
-      // 同時に実行され、selected がヘッダー行（cwd名やステータスグループ名）に一時的に
-      // 移動してしまう競合が起きる。矢印キーはカスタムハンドラーのみで処理する。
-      mouse: true,
-    })
-
-    this.bindKeys()
     this.syncList()
 
     manager.on('data', (sessionId: string) => {
@@ -61,184 +54,152 @@ export class OverviewUI {
         return
       }
       this.syncList()
-      screen.render()
+      this.render()
     })
 
     manager.on('exit', () => {
       this.syncList()
-      screen.render()
+      this.render()
     })
 
     manager.on('status', () => {
       this.syncList()
-      screen.render()
+      this.render()
     })
 
     manager.on('name', () => {
       this.syncList()
-      screen.render()
+      this.render()
     })
 
-    // removeSession() は emitSelection() を呼ぶが、OverviewUI は 'selection' を
-    // listen していないため、index.ts の exit ハンドラ経由で自動削除された場合に
-    // UI が再描画されない。'selection' を listen して確実に同期する。
     manager.on('selection', () => {
       this.syncList()
-      screen.render()
+      this.render()
     })
   }
 
-  private bindKeys(): void {
-    this.listBox.key(['up', 'k'], () => {
-      if (this.manager.sessions.length === 0) return
+  handleKeypress(str: string, key: KeyInfo): void {
+    if (this.promptState?.mode === 'agent') {
+      this.handleAgentPromptKeypress(key)
+      return
+    }
+    if (this.promptState?.mode === 'cwd') {
+      this.handleCwdPromptKeypress(key)
+      return
+    }
+    if (this.promptState?.mode === 'error') {
+      if (key.name === 'enter' || key.name === 'return' || key.name === 'escape' || str === 'q') {
+        this.promptState = null
+        this.render()
+      }
+      return
+    }
+
+    if ((key.name === 'up' || str === 'k') && this.manager.sessions.length > 0) {
       this.moveSelection(-1)
-      // syncList() と screen.render() は moveSelection() → selectSession() →
-      // emitSelection() → 'selection' イベント経由で自動的に呼ばれる
-    })
+      return
+    }
 
-    this.listBox.key(['down', 'j'], () => {
-      if (this.manager.sessions.length === 0) return
+    if ((key.name === 'down' || str === 'j') && this.manager.sessions.length > 0) {
       this.moveSelection(1)
-      // syncList() と screen.render() は moveSelection() → selectSession() →
-      // emitSelection() → 'selection' イベント経由で自動的に呼ばれる
-    })
+      return
+    }
 
-    this.listBox.key('n', () => {
+    if (str === 'n') {
       this.showAddPrompt()
-    })
+      return
+    }
 
-    this.listBox.key(['d', 'C-x'], () => {
+    if (str === 'd' || (key.ctrl && key.name === 'x')) {
       const session = this.manager.selectedSession
       if (session) {
         this.manager.removeSession(session.id)
         this.syncList()
-        this.screen.render()
+        this.render()
       }
-    })
+    }
+  }
+
+  private handleAgentPromptKeypress(key: KeyInfo): void {
+    const state = this.promptState
+    if (!state || state.mode !== 'agent') return
+
+    if (key.name === 'escape') {
+      this.promptState = null
+      this.render()
+      return
+    }
+
+    if (key.name === 'up') {
+      state.selectedIndex =
+        (state.selectedIndex - 1 + OverviewUI.AGENT_TYPES.length) % OverviewUI.AGENT_TYPES.length
+      this.render()
+      return
+    }
+
+    if (key.name === 'down') {
+      state.selectedIndex = (state.selectedIndex + 1) % OverviewUI.AGENT_TYPES.length
+      this.render()
+      return
+    }
+
+    if (key.name === 'enter' || key.name === 'return') {
+      const agentType = OverviewUI.AGENT_TYPES[state.selectedIndex]!
+      this.promptState = {
+        mode: 'cwd',
+        agentType,
+        value: process.cwd(),
+        candidates: [],
+      }
+      this.render()
+    }
+  }
+
+  private handleCwdPromptKeypress(key: KeyInfo): void {
+    const state = this.promptState
+    if (!state || state.mode !== 'cwd') return
+
+    if (key.name === 'escape') {
+      this.promptState = null
+      this.render()
+      return
+    }
+
+    if (key.name === 'enter' || key.name === 'return') {
+      const expanded = state.value.trim().replace(/^~/, process.env.HOME ?? '~') || process.cwd()
+      const agentType = state.agentType
+      this.promptState = null
+      this.render()
+      this.spawnAgent(agentType, expanded)
+      return
+    }
+
+    if (key.name === 'tab') {
+      const { completed, candidates } = completePath(state.value)
+      state.value = completed
+      state.candidates = candidates
+      this.render()
+      return
+    }
+
+    state.candidates = []
+
+    if (key.name === 'backspace') {
+      state.value = state.value.slice(0, -1)
+      this.render()
+      return
+    }
+
+    if (!key.ctrl && !key.meta && key.sequence?.length === 1) {
+      state.value += key.sequence
+      this.render()
+    }
   }
 
   private showAddPrompt(): void {
-    if (this.promptOpen) return
-    this.promptOpen = true
-
-    const agentTypes = ['claude-code', 'codex', 'gemini-cli', 'copilot']
-
-    const prompt = blessed.list({
-      parent: this.screen,
-      top: 'center',
-      left: 'center',
-      width: 40,
-      height: agentTypes.length + 4,
-      border: { type: 'line' },
-      label: ' Select agent type ',
-      items: agentTypes,
-      keys: true,
-      style: {
-        selected: { bg: 'blue', fg: 'white' },
-        border: { fg: 'green' },
-      },
-    })
-
-    const close = () => {
-      this.promptOpen = false
-      prompt.destroy()
-      this.listBox.focus()
-      this.screen.render()
-    }
-
-    prompt.key('enter', () => {
-      const selectedIdx = (prompt as unknown as { selected: number }).selected ?? 0
-      const selected = agentTypes[selectedIdx]!
-      prompt.destroy()
-      this.screen.render()
-      this.showCwdPrompt(selected)
-    })
-
-    prompt.key('escape', close)
-
-    prompt.focus()
-    this.screen.render()
-  }
-
-  private showCwdPrompt(agentType: string): void {
-    let value = process.cwd()
-    let candidateList: Widgets.ListElement | null = null
-
-    const box = blessed.box({
-      parent: this.screen,
-      top: 'center',
-      left: 'center',
-      width: 60,
-      height: 3,
-      border: { type: 'line' },
-      label: ' cwd  Tab:補完  Enter:確定  Esc:キャンセル ',
-      style: { border: { fg: 'green' } },
-    })
-
-    const renderInput = () => {
-      box.setContent(value)
-      this.screen.render()
-    }
-
-    const closeCandidates = () => {
-      if (candidateList) {
-        candidateList.destroy()
-        candidateList = null
-      }
-    }
-
-    const cleanup = () => {
-      this.screen.removeListener('keypress', onKeypress)
-      closeCandidates()
-      this.promptOpen = false
-      box.destroy()
-      this.listBox.focus()
-      this.screen.render()
-    }
-
-    const onKeypress = (_ch: string, key: { name: string; ctrl?: boolean; meta?: boolean; sequence?: string }) => {
-      if (!key) return
-      closeCandidates()
-
-      if (key.name === 'enter' || key.name === 'return') {
-        const expanded = value.trim().replace(/^~/, process.env.HOME ?? '~') || process.cwd()
-        cleanup()
-        this.spawnAgent(agentType, expanded)
-      } else if (key.name === 'escape') {
-        cleanup()
-      } else if (key.name === 'tab') {
-        const { completed, candidates } = completePath(value)
-        value = completed
-        if (candidates.length > 1) {
-          const maxVisible = Math.min(candidates.length, 8)
-          candidateList = blessed.list({
-            parent: this.screen,
-            top: '50%',
-            left: 'center',
-            width: 60,
-            height: maxVisible + 2,
-            border: { type: 'line' },
-            items: candidates,
-            keys: false,
-            style: { border: { fg: 'cyan' } },
-          }) as Widgets.ListElement
-        }
-        renderInput()
-      } else if (key.name === 'backspace') {
-        value = value.slice(0, -1)
-        renderInput()
-      } else if (!key.ctrl && !key.meta && key.sequence?.length === 1) {
-        value += key.sequence
-        renderInput()
-      }
-    }
-
-    // 現在のキーイベント(enter)がこのリスナーに届かないよう1tick遅らせる
-    setImmediate(() => {
-      this.screen.on('keypress', onKeypress)
-    })
-    box.focus()
-    renderInput()
+    if (this.promptState) return
+    this.promptState = { mode: 'agent', selectedIndex: 0 }
+    this.render()
   }
 
   private spawnAgent(agentType: string, cwd: string): void {
@@ -268,66 +229,13 @@ export class OverviewUI {
   }
 
   private showError(message: string): void {
-    const overlay = blessed.box({
-      parent: this.screen,
-      top: 'center',
-      left: 'center',
-      width: 50,
-      height: message.split('\n').length + 4,
-      border: { type: 'line' },
-      label: ' Error ',
-      content: `\n ${message.split('\n').join('\n ')}`,
-      style: { border: { fg: 'red' }, label: { fg: 'red' } },
-      keys: true,
-      mouse: true,
-    })
-    overlay.key(['enter', 'escape', 'q'], () => {
-      overlay.destroy()
-      this.listBox.focus()
-      this.screen.render()
-    })
-    overlay.focus()
-    this.screen.render()
+    this.promptState = { mode: 'error', message }
+    this.render()
   }
 
   private syncList(): void {
     const orderedSessions = this.getOrderedSessions()
-
-    const items: string[] = []
-    const selectedId = this.manager.selectedSession?.id
-    let selectedDisplayIndex = -1
-
-    const cwdGroups = this.groupByCwd(orderedSessions)
-    for (const [cwd, sessions] of cwdGroups) {
-      items.push(` {bold}${this.shortenPath(cwd)}{/bold}`)
-
-      for (const group of OverviewUI.STATUS_GROUPS) {
-        const groupSessions = sessions.filter((s) => s.status === group.status)
-        if (groupSessions.length === 0) continue
-
-        items.push(`  ${group.label}`)
-        for (const session of groupSessions) {
-          const statusIcon =
-            session.status === 'running' ? '⣾'
-            : session.status === 'idle'    ? '○'
-            : session.status === 'done'    ? '✓'
-            : '✗'
-          const sessionTitle = session.displayName ?? session.id
-          const sessionLabel = session.type ? `${sessionTitle} (${session.type})` : sessionTitle
-          const content = `${statusIcon} ${sessionLabel}  ${this.getStatusLabel(session.status)}`
-          const color = OverviewUI.STATUS_COLORS[session.status]
-          items.push(`  {${color}-fg}${content}{/${color}-fg}`)
-          if (session.id === selectedId) {
-            selectedDisplayIndex = items.length - 1
-          }
-        }
-      }
-    }
-
-    this.listBox.setItems(items)
-    if (selectedDisplayIndex >= 0) {
-      this.listBox.select(selectedDisplayIndex)
-    }
+    this.displaySessionIds = orderedSessions.map((session) => session.id)
   }
 
   private groupByCwd(sessions: SessionManager['sessions']): Map<string, SessionManager['sessions']> {
@@ -361,18 +269,17 @@ export class OverviewUI {
   }
 
   private moveSelection(direction: -1 | 1): void {
-    const orderedSessions = this.getOrderedSessions()
     const selectedId = this.manager.selectedSession?.id
-    const currentIndex = selectedId
-      ? orderedSessions.findIndex((session) => session.id === selectedId)
-      : -1
+    if (this.displaySessionIds.length === 0) return
+
+    const currentIndex = selectedId ? this.displaySessionIds.indexOf(selectedId) : -1
     const nextIndex = currentIndex === -1
       ? 0
-      : Math.max(0, Math.min(orderedSessions.length - 1, currentIndex + direction))
-    const nextSession = orderedSessions[nextIndex]
-    if (!nextSession) return
+      : (currentIndex + direction + this.displaySessionIds.length) % this.displaySessionIds.length
+    const nextSessionId = this.displaySessionIds[nextIndex]
+    if (!nextSessionId) return
 
-    const managerIndex = this.manager.sessions.findIndex((session) => session.id === nextSession.id)
+    const managerIndex = this.manager.sessions.findIndex((session) => session.id === nextSessionId)
     if (managerIndex >= 0) {
       this.manager.selectSession(managerIndex)
     }
@@ -408,22 +315,174 @@ export class OverviewUI {
     }
   }
 
+  private countByStatus(status: string): number {
+    return this.manager.sessions.filter((session) => session.status === status).length
+  }
+
+  private stripAnsi(value: string): string {
+    return value.replace(/\x1b\[[0-9;]*m/g, '')
+  }
+
+  private padRight(value: string, width: number): string {
+    const visibleLength = this.stripAnsi(value).length
+    if (visibleLength >= width) {
+      return value
+    }
+    return value + ' '.repeat(width - visibleLength)
+  }
+
+  private color(text: string, ...codes: string[]): string {
+    return `${codes.join('')}${text}${OverviewUI.ANSI.reset}`
+  }
+
+  private getStatusColor(status: string): string {
+    switch (status) {
+      case 'running':
+        return OverviewUI.ANSI.fgGreen
+      case 'idle':
+        return OverviewUI.ANSI.fgAmber
+      case 'done':
+        return OverviewUI.ANSI.fgCyan
+      case 'error':
+        return OverviewUI.ANSI.fgRed
+      default:
+        return OverviewUI.ANSI.fgSlate
+    }
+  }
+
+  private makeRule(label: string, width = 64): string {
+    const text = ` ${label} `
+    if (text.length >= width) {
+      return text
+    }
+    const fill = '─'.repeat(width - text.length)
+    return text + fill
+  }
+
+  private formatSummary(): string {
+    const parts = OverviewUI.STATUS_GROUPS.map((group) => {
+      const count = this.countByStatus(group.status)
+      return this.color(`${group.label} ${count}`, OverviewUI.ANSI.bold, this.getStatusColor(group.status))
+    })
+    return parts.join('  ·  ')
+  }
+
+  private buildMainLines(): string[] {
+    const orderedSessions = this.getOrderedSessions()
+    const selectedId = this.manager.selectedSession?.id
+    const lines = [
+      '╭────────────────────────────── mav overview ──────────────────────────────╮',
+      `│ ${this.padRight('AGENTS', 74)} │`,
+      `│ ${this.padRight(this.formatSummary(), 74)} │`,
+      '╰──────────────────────────────────────────────────────────────────────────╯',
+      '',
+    ]
+
+    const cwdGroups = this.groupByCwd(orderedSessions)
+    for (const [cwd, sessions] of cwdGroups) {
+      lines.push(this.color(this.makeRule(this.shortenPath(cwd)), OverviewUI.ANSI.dim))
+
+      for (const group of OverviewUI.STATUS_GROUPS) {
+        const groupSessions = sessions.filter((s) => s.status === group.status)
+        if (groupSessions.length === 0) continue
+
+        lines.push(this.color(`  ${group.label} (${groupSessions.length})`, OverviewUI.ANSI.bold, this.getStatusColor(group.status)))
+        for (const session of groupSessions) {
+          const color = this.getStatusColor(session.status)
+          const statusIcon =
+            session.status === 'running' ? '⣾'
+            : session.status === 'idle'    ? '○'
+            : session.status === 'done'    ? '✓'
+            : '✗'
+          const sessionTitle = session.displayName ?? session.id
+          const sessionLabel = session.type ? `${sessionTitle} (${session.type})` : sessionTitle
+          const prefix = session.id === selectedId ? '> ' : '  '
+          const sessionLine = `${prefix}${statusIcon} ${sessionLabel}  ${this.getStatusLabel(session.status)}`
+          lines.push(session.id === selectedId
+            ? this.color(sessionLine, OverviewUI.ANSI.bold, color)
+            : this.color(sessionLine, color))
+        }
+
+        lines.push('')
+      }
+    }
+
+    if (orderedSessions.length === 0) {
+      lines.push(this.makeRule('empty'))
+      lines.push('  No sessions. Press n to add one.')
+      lines.push('')
+    }
+
+    lines.push('╭──────────────────────────────── controls ────────────────────────────────╮')
+    lines.push(`│ ${this.padRight('↑/↓ or j/k move   Enter detail   Ctrl+] back   n new   d delete   q quit', 74)} │`)
+    lines.push('╰──────────────────────────────────────────────────────────────────────────╯')
+    return lines
+  }
+
+  private buildPromptLines(): string[] {
+    const state = this.promptState
+    if (!state) return []
+
+    const lines = ['', '╭──────────────────────────────── prompt ──────────────────────────────────╮']
+    if (state.mode === 'agent') {
+      lines.push(`│ ${this.padRight('Select agent type', 74)} │`)
+      lines.push('│                                                                          │')
+      for (const [index, agentType] of OverviewUI.AGENT_TYPES.entries()) {
+        lines.push(`│ ${this.padRight(`${index === state.selectedIndex ? '> ' : '  '}${agentType}`, 74)} │`)
+      }
+      lines.push('│                                                                          │')
+      lines.push(`│ ${this.padRight('Enter: select  Esc: cancel', 74)} │`)
+      lines.push('╰──────────────────────────────────────────────────────────────────────────╯')
+      return lines
+    }
+
+    if (state.mode === 'cwd') {
+      lines.push(`│ ${this.padRight(`cwd for ${state.agentType}`, 74)} │`)
+      lines.push(`│ ${this.padRight(state.value, 74)} │`)
+      if (state.candidates.length > 1) {
+        lines.push('│                                                                          │')
+        lines.push(`│ ${this.padRight('Candidates:', 74)} │`)
+        for (const candidate of state.candidates.slice(0, 8)) {
+          lines.push(`│ ${this.padRight(`  ${candidate}`, 74)} │`)
+        }
+      }
+      lines.push('│                                                                          │')
+      lines.push(`│ ${this.padRight('Tab: complete  Enter: confirm  Esc: cancel', 74)} │`)
+      lines.push('╰──────────────────────────────────────────────────────────────────────────╯')
+      return lines
+    }
+
+    lines.push(`│ ${this.padRight('Error', 74)} │`)
+    for (const line of state.message.split('\n')) {
+      lines.push(`│ ${this.padRight(line, 74)} │`)
+    }
+    lines.push('│                                                                          │')
+    lines.push(`│ ${this.padRight('Enter/Esc/q: close', 74)} │`)
+    lines.push('╰──────────────────────────────────────────────────────────────────────────╯')
+    return lines
+  }
+
+  private render(): void {
+    if (!this.visible) return
+    this.terminal.render([...this.buildMainLines(), ...this.buildPromptLines()].join('\n'))
+  }
+
   show(): void {
-    this.listBox.show()
-    this.listBox.focus()
+    this.visible = true
     this.syncList()
-    this.screen.render()
+    this.render()
   }
 
   isPromptOpen(): boolean {
-    return this.promptOpen
+    return this.promptState != null
   }
 
   resizeSelectedSession(): void {
     this.syncList()
+    this.render()
   }
 
   hide(): void {
-    this.listBox.hide()
+    this.visible = false
   }
 }

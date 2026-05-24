@@ -7,7 +7,7 @@
 ## 技術スタック
 
 - **言語**: TypeScript (Node.js, ESM)
-- **TUI**: neo-blessed（blessedのフォーク、APIは同一）
+- **TUI**: ANSIエスケープ + `readline.emitKeypressEvents()` ベースの自前実装
 - **PTY管理**: node-pty（ネイティブモジュール）
 - **設定ファイル**: js-yaml
 - **CLI引数**: commander
@@ -32,12 +32,11 @@ src/
   agent.ts           # AgentSession クラス（PTYライフサイクル）
   session-manager.ts # SessionManager クラス（状態管理）
   index.ts           # start() 関数（SessionManager + App の組み立て）
-  types/
-    neo-blessed.d.ts # neo-blessed → blessed 型マッピング
   ui/
-    app.ts           # blessed.screen 保持、2モード切り替え、グローバルキー
-    overview.ts      # Overviewモード（エージェントリスト＋ログ＋入力バー）
-    detail.ts        # Detailモード（PTYパススルー＋ヘッダー）
+    app.ts           # TerminalUI 保持、2モード切り替え、グローバルキー
+    terminal.ts      # stdin/stdout ラッパー、keypress/resize/alternate screen
+    overview.ts      # Overviewモード（ANSI再描画 + 追加プロンプト）
+    detail.ts        # Detailモード（PTYパススルー）
 bin/
   mav.ts             # CLIエントリ（commander → src/index.ts）
 tests/
@@ -54,11 +53,11 @@ scripts/
 
 `App`（`src/ui/app.ts`）が `overview` / `detail` の2モードを管理する。
 
-- **Overviewモード**: `OverviewUI` が表示、`listBox` にフォーカス
+- **Overviewモード**: `OverviewUI` が表示、全画面をANSIで再描画
 - **Detailモード**: `DetailUI` が表示、全キーストロークを選択セッションのPTYに転送
 - Detail から Overview へ戻るショートカットは `Ctrl+]`
-- Detail の戻るキーは `App` の `screen.key(...)` ではなく `DetailUI` の raw input listener 側で処理する
-- 理由: Detail モードでは blessed の通常キー処理をほぼバイパスしており、ショートカットが PTY 側へ流れてしまうため
+- Detail の戻るキーは `App` の keypress 処理ではなく `DetailUI` の raw input listener 側で処理する
+- 理由: Detail モードでは stdin 生入力を直接PTYへ流しており、通常の keypress ハンドリングでは取りこぼすため
 
 ### PTYイベントフロー
 
@@ -81,7 +80,6 @@ PTY.onData(chunk)
 
 - コメントは「なぜ」が自明でない場合のみ書く
 - `!` 非nullアサーションは配列アクセス等で安全が明らかな箇所のみ使う
-- blessed の型定義が不完全な箇所は `as unknown as T` でキャストする（`as any` は使わない）
 - UIモジュールもロジックが分離できる範囲ではユニットテストを書く
 - `DetailUI` の raw input は terminal 実装差分を吸収する。`Ctrl+]` は少なくとも raw control code `\x1d` と kitty/ghostty 系の `CSI u` 形式 `\x1b[93;5u` を戻るキーとして扱う
 
@@ -89,7 +87,7 @@ PTY.onData(chunk)
 
 - `config.ts` / `agent.ts` / `session-manager.ts` はユニットテスト必須
 - `src/ui/` も入力変換やセッション選択のようなロジックはユニットテストで固定する
-- ただし blessed 自体の描画品質や端末依存の体験は手動確認も併用する
+- ただし ANSI描画や端末依存の体験は手動確認も併用する
 - テストを追加するときは必ず先にテストを書いて失敗を確認してから実装する（TDD）
 
 ## パッケージ管理

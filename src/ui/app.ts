@@ -1,95 +1,87 @@
-import blessed from 'neo-blessed'
-import type { Widgets } from 'neo-blessed'
 import type { AgentSession } from '../agent.js'
 import type { SessionManager } from '../session-manager.js'
 import { saveState } from '../state.js'
-import { OverviewUI } from './overview.js'
 import { DetailUI } from './detail.js'
+import { OverviewUI } from './overview.js'
+import type { KeyInfo } from './terminal.js'
+import { TerminalUI } from './terminal.js'
 
 type Mode = 'overview' | 'detail'
 
 export class App {
-  private screen: Widgets.Screen
   private manager: SessionManager
   private statePath: string
+  private terminal: TerminalUI
   private overviewUI: OverviewUI
   private detailUI: DetailUI
   private mode: Mode = 'overview'
 
-  constructor(manager: SessionManager, statePath: string) {
+  constructor(manager: SessionManager, statePath: string, terminal = new TerminalUI()) {
     this.manager = manager
     this.statePath = statePath
+    this.terminal = terminal
 
-    this.screen = blessed.screen({
-      smartCSR: true,
-      title: 'mav',
-      fullUnicode: true,
-    })
-
-    this.overviewUI = new OverviewUI(this.screen, manager, (session) => {
+    this.overviewUI = new OverviewUI(terminal, manager, (session) => {
       if (session) {
         this.switchToDetail(session)
       }
     })
-    this.detailUI = new DetailUI(this.screen, () => {
+    this.detailUI = new DetailUI(terminal, () => {
       if (this.mode === 'detail') {
         this.switchToOverview()
       }
     })
 
-    const proto = Object.getPrototypeOf(this.screen) as { render?: () => void }
-    const baseRender = proto.render ?? this.screen.render
-    const protoRender = baseRender.bind(this.screen)
-    ;(this.screen as unknown as { render: () => void }).render = () => {
-      if (this.mode === 'detail') return
-      protoRender()
-    }
-
     this.bindGlobalKeys()
 
-    this.screen.on('resize', () => {
-      const cols = this.screen.width as number
-      const rows = this.screen.height as number
+    this.terminal.onResize(() => {
+      const cols = this.terminal.cols
+      const rows = this.terminal.rows
       if (this.mode === 'detail') {
         this.detailUI.resize(cols, rows)
         return
       }
 
       this.overviewUI.resizeSelectedSession()
-      this.screen.render()
     })
   }
 
   private bindGlobalKeys(): void {
-    this.screen.key('q', () => {
-      if (this.mode === 'detail') return
-      this.shutdown()
-    })
-
-    this.screen.key('C-c', () => {
+    this.terminal.onKeypress((str, key) => {
       if (this.mode === 'overview') {
-        this.shutdown()
+        this.handleOverviewKeypress(str, key)
       }
     })
+  }
 
-    this.screen.key(['right', 'enter'], () => {
-      if (this.mode !== 'overview') return
-      if (this.overviewUI.isPromptOpen()) return
+  private handleOverviewKeypress(str: string, key: KeyInfo): void {
+    if (key.ctrl && key.name === 'c') {
+      this.shutdown()
+      return
+    }
+
+    if (str === 'q') {
+      this.shutdown()
+      return
+    }
+
+    if (!this.overviewUI.isPromptOpen() && (key.name === 'right' || key.name === 'enter' || key.name === 'return')) {
       const session = this.manager.selectedSession
       if (!session) return
-      this.switchToDetail()
-    })
+      this.switchToDetail(session)
+      return
+    }
+
+    this.overviewUI.handleKeypress(str, key)
   }
 
   private switchToDetail(session: AgentSession | null = this.manager.selectedSession): void {
     if (!session) return
     this.mode = 'detail'
     this.overviewUI.hide()
-    this.screen.program.normalBuffer()
-    this.screen.program.disableMouse()
-    this.screen.realloc()
+    this.terminal.exitAlternateScreen()
     this.detailUI.attach(session)
-    this.detailUI.resize(this.screen.width as number, this.screen.height as number)
+    this.detailUI.resize(this.terminal.cols, this.terminal.rows)
     this.detailUI.show()
   }
 
@@ -97,9 +89,7 @@ export class App {
     this.mode = 'overview'
     this.detailUI.detach()
     this.detailUI.hide()
-    this.screen.program.alternateBuffer()
-    this.screen.program.enableMouse()
-    this.screen.realloc()
+    this.terminal.enterAlternateScreen()
     this.overviewUI.show()
   }
 
@@ -110,13 +100,13 @@ export class App {
       // 終了シーケンスは継続する
     }
     this.manager.killAll()
-    this.screen.destroy()
+    this.terminal.destroy()
     process.exit(0)
   }
 
   start(): void {
+    this.terminal.enterAlternateScreen()
     this.overviewUI.show()
     this.overviewUI.resizeSelectedSession()
-    this.screen.render()
   }
 }

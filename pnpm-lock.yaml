@@ -14,19 +14,10 @@ importers:
       js-yaml:
         specifier: 4.1.0
         version: 4.1.0
-      neo-blessed:
-        specifier: 0.2.0
-        version: 0.2.0
       node-pty:
         specifier: 1.0.0
         version: 1.0.0
-      term.js:
-        specifier: ^0.0.7
-        version: 0.0.7
     devDependencies:
-      '@types/blessed':
-        specifier: ^0.1.27
-        version: 0.1.27
       '@types/js-yaml':
         specifier: 4.0.9
         version: 4.0.9
@@ -498,9 +489,6 @@ packages:
     cpu: [x64]
     os: [win32]
 
-  '@types/blessed@0.1.27':
-    resolution: {integrity: sha512-ZOQGjLvWDclAXp0rW5iuUBXeD6Gr1PkitN7tj7/G8FCoSzTsij6OhXusOzMKhwrZ9YlL2Pmu0d6xJ9zVvk+Hsg==}
-
   '@types/chai@5.2.3':
     resolution: {integrity: sha512-Mw558oeA9fFbv65/y4mHtXDs9bPnFMZAL/jxdPFUpOHHIXX91mcgEHbS5Lahr+pwZFR8A7GQleRWeI6cGFC2UA==}
 
@@ -645,11 +633,6 @@ packages:
     engines: {node: ^10 || ^12 || ^13.7 || ^14 || >=15.0.1}
     hasBin: true
 
-  neo-blessed@0.2.0:
-    resolution: {integrity: sha512-C2kC4K+G2QnNQFXUIxTQvqmrdSIzGTX1ZRKeDW6ChmvPRw8rTkTEJzbEQHiHy06d36PCl/yMOCjquCRV8SpSQw==}
-    engines: {node: '>= 8.0.0'}
-    hasBin: true
-
   node-pty@1.0.0:
     resolution: {integrity: sha512-wtBMWWS7dFZm/VgqElrTvtfMq4GzJ6+edFI0Y0zyzygUSZMgZdraDUMUhCIvkjhJjme15qWmbyJbtAx4ot4uZA==}
 
@@ -691,10 +674,6 @@ packages:
 
   std-env@3.10.0:
     resolution: {integrity: sha512-5GS12FdOZNliM5mAOxFRg7Ir0pWz8MdpYm6AY6VPkGpbA7ZzmbzNcBJQ0GPvvyWgcY7QAhCgf9Uy89I03faLkg==}
-
-  term.js@0.0.7:
-    resolution: {integrity: sha512-c65+7Z/51TDl/owjT2BrPHhMtJu5MjcvPWTC2oAV/ybzuwUCuj5/OQ08urfEHkQpfphyXs/zZRCjZfnSC3bntA==}
-    engines: {node: '>= 0.8.0'}
 
   tinybench@2.9.0:
     resolution: {integrity: sha512-0+DUvqWMValLmha6lr4kD8iAMK1HzV0/aKnCtWb9v9641TnP/MFb7Pc2bxoxQjTXAErryXVgUOfv2YqNllqGeg==}
@@ -1044,10 +1023,6 @@ snapshots:
   '@rollup/rollup-win32-x64-msvc@4.60.4':
     optional: true
 
-  '@types/blessed@0.1.27':
-    dependencies:
-      '@types/node': 22.15.21
-
   '@types/chai@5.2.3':
     dependencies:
       '@types/deep-eql': 4.0.2
@@ -1227,8 +1202,6 @@ snapshots:
 
   nanoid@3.3.12: {}
 
-  neo-blessed@0.2.0: {}
-
   node-pty@1.0.0:
     dependencies:
       nan: 2.27.0
@@ -1287,8 +1260,6 @@ snapshots:
   stackback@0.0.2: {}
 
   std-env@3.10.0: {}
-
-  term.js@0.0.7: {}
 
   tinybench@2.9.0: {}
 
