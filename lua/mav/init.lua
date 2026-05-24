@@ -16,6 +16,24 @@ M._timer = nil
 M._last_updated = nil
 M._last_session = nil
 
+local function normalize_path(path)
+  if type(path) ~= "string" or path == "" then
+    return nil
+  end
+
+  local uv = vim.uv or vim.loop
+  local real = uv and uv.fs_realpath(path) or nil
+  return real or path
+end
+
+local function current_cwd_matches(session)
+  if not session or type(session.cwd) ~= "string" or session.cwd == "" then
+    return false
+  end
+
+  return normalize_path(vim.fn.getcwd()) == normalize_path(session.cwd)
+end
+
 local function read_session()
   return state.read(M._opts.state_file)
 end
@@ -42,6 +60,9 @@ function M.poll_once()
   end
 
   if session.updatedAt == M._last_updated then
+    if M._opts.auto_follow and not current_cwd_matches(M._last_session) then
+      follow.follow(M._last_session, M._opts)
+    end
     return M._last_session
   end
 
