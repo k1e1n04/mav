@@ -1,5 +1,5 @@
-import { describe, it, expect, afterEach } from 'vitest'
-import { existsSync, readFileSync } from 'node:fs'
+import { describe, it, expect } from 'vitest'
+import { existsSync, readFileSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 
 const { buildHookArgs, cleanupHookFiles } = await import('../src/hook-injector.js')
@@ -23,16 +23,24 @@ describe('hook-injector: claude-code', () => {
 describe('hook-injector: gemini-cli', () => {
   it('settings.local.json を書く候補パスを返す', () => {
     const cwd = '/tmp/test-project'
+    const settingsPath = join(cwd, '.gemini', 'settings.local.json')
+    // Ensure no leftover file from a previous run
+    if (existsSync(settingsPath)) rmSync(settingsPath)
+
     const { hookFiles } = buildHookArgs('gemini-cli', [], 'mav report cwd "$(pwd)"', { cwd })
     expect(hookFiles).toHaveLength(1)
-    expect(hookFiles[0]).toBe(join(cwd, '.gemini', 'settings.local.json'))
+    expect(hookFiles[0]).toBe(settingsPath)
+
+    // Cleanup
+    cleanupHookFiles(hookFiles)
   })
 })
 
 describe('hook-injector: codex', () => {
   it('--profile-v2 引数を追加する', () => {
-    const { args } = buildHookArgs('codex', [], 'mav report cwd "$(pwd)"')
+    const { args, hookFiles } = buildHookArgs('codex', [], 'mav report cwd "$(pwd)"')
     expect(args).toContain('--profile-v2')
+    cleanupHookFiles(hookFiles)
   })
 
   it('hookFiles にTOMLファイルパスが含まれる', () => {
