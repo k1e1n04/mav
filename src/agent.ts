@@ -87,6 +87,17 @@ export class AgentSession extends EventEmitter {
     this.emit('name', name)
   }
 
+  setDisplayName(name: string): void {
+    const normalized = AgentSession.normalizeDisplayName(name)
+    if (normalized.length < AgentSession.DISPLAY_NAME_MIN_LENGTH) {
+      return
+    }
+
+    this.displayName = normalized
+    this.displayNameLocked = true
+    this.emit('name', normalized)
+  }
+
   write(data: string): void {
     if (this.exited) return
     this.updateDisplayNameFromInput(data)

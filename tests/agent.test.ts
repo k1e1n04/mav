@@ -134,6 +134,16 @@ describe('AgentSession', () => {
     expect(session.displayName).toBe(lockedName)
   })
 
+  it('setDisplayName() で表示名を手動更新できる', () => {
+    const handler = vi.fn()
+    session.on('name', handler)
+
+    session.setDisplayName('rename session later')
+
+    expect(session.displayName).toBe('rename session later')
+    expect(handler).toHaveBeenCalledWith('rename session later')
+  })
+
   it('APCシーケンス（\\x1b_...\\x1b\\\\）に埋め込まれたCRLFで表示名が汚染されない', () => {
     const originalName = session.displayName
 

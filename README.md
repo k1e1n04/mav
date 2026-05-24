@@ -1,6 +1,6 @@
 # mav — multi-agent view
 
-`mav` is a wrapper CLI that lets you manage multiple AI coding assistant CLIs such as `claude-code`, `codex`, `gemini-cli`, and `copilot` from a single terminal window.
+`mav` is a wrapper CLI that lets you manage multiple AI coding assistant CLIs such as `claude-code`, `codex`, `gemini-cli`, `copilot`, `cursor`, `opencode`, and `antigravity-cli` from a single terminal window.
 
 ```text
 ┌── AGENTS ────────────────────────────────────────────────────────────────┐
@@ -94,8 +94,12 @@ agents:
   - type: gemini-cli
     cmd: gemini
   - type: copilot
-    cmd: gh
-    args: []
+  - type: cursor
+    # If cmd is omitted, the default "cursor-agent" command is used
+  - type: opencode
+    # If cmd is omitted, the default "opencode" command is used
+  - type: antigravity-cli
+    # If cmd is omitted, the default "agy" command is used
 ```
 
 ### Default Commands by Agent Type
@@ -106,6 +110,9 @@ agents:
 | `codex` | `codex` |
 | `gemini-cli` | `gemini` |
 | `copilot` | `copilot` |
+| `cursor` | `cursor-agent` |
+| `opencode` | `opencode` |
+| `antigravity-cli` | `agy` |
 
 ## Keybindings
 
@@ -115,6 +122,7 @@ agents:
 | `→` / `Enter` | Overview | Open the selected session in fullscreen |
 | `Ctrl+]` | Detail | Return to Overview |
 | `n` | Overview | Add a new session |
+| `e` | Overview | Edit the selected session name |
 | `d` | Overview | Terminate and remove the selected session |
 | `q` / `Ctrl+C` | Overview | Quit `mav` and terminate all sessions |
 

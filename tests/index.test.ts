@@ -62,6 +62,16 @@ vi.mock('../src/session-manager.js', () => ({
       }
       this.emit('cwd', sessionId, cwd)
     }
+    emitName(sessionId: string, displayName: string) {
+      const session = (this.sessions as Array<{ id?: string; displayName?: string }>).find((item) => item?.id === sessionId)
+      if (session) {
+        session.displayName = displayName
+        if (this.selectedSession === session) {
+          this.selectedSession = { ...session }
+        }
+      }
+      this.emit('name', sessionId, displayName)
+    }
   },
 }))
 
@@ -382,6 +392,34 @@ describe('start', () => {
         type: 'codex',
         displayName: 'codex 1',
         cwd: '/tmp/worktrees/feature-a',
+      }),
+    )
+  })
+
+  it('選択中セッションの displayName 更新で current-session.json を更新する', () => {
+    loadConfigMock.mockReturnValue({
+      agents: [{ type: 'codex', cmd: 'codex', args: [] }],
+    })
+    const createdSession = {
+      id: 'codex#1',
+      type: 'codex',
+      displayName: 'codex 1',
+      cwd: '/tmp/project-a',
+      logBuffer: [],
+      status: 'idle',
+    }
+    managerAddSessionMock.mockReturnValue(createdSession)
+
+    const manager = start() as unknown as { emitName: (sessionId: string, displayName: string) => void }
+    manager.emitName('codex#1', 'fix auth redirect')
+
+    expect(saveCurrentSessionStateMock).toHaveBeenLastCalledWith(
+      expect.any(String),
+      expect.objectContaining({
+        id: 'codex#1',
+        type: 'codex',
+        displayName: 'fix auth redirect',
+        cwd: '/tmp/project-a',
       }),
     )
   })

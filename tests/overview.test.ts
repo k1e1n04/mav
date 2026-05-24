@@ -122,6 +122,112 @@ describe('OverviewUI', () => {
     })
   })
 
+  it('cursor選択時は cursor-agent コマンドでセッションを起動する', () => {
+    const initialSession = { id: 'claude-code#1', displayName: 'claude-code 1', status: 'running', logBuffer: [], write: vi.fn() }
+    const addedSession = { id: 'cursor#1', displayName: 'cursor 1', status: 'running', logBuffer: [], write: vi.fn() }
+    const manager = Object.assign(new EventEmitter(), {
+      sessions: [initialSession],
+      selectedIndex: 0,
+      selectedSession: initialSession,
+      selectSession(index: number) {
+        this.selectedIndex = index
+        this.selectedSession = this.sessions[index] ?? null
+        this.emit('selection', this.selectedSession)
+      },
+      addSession: vi.fn(() => {
+        manager.sessions.push(addedSession)
+        return addedSession
+      }),
+      removeSession: vi.fn(),
+    })
+
+    const ui = new OverviewUI(terminal as never, manager as never)
+    ui.show()
+    ui.handleKeypress('n', key('n'))
+    ui.handleKeypress('', key('down'))
+    ui.handleKeypress('', key('down'))
+    ui.handleKeypress('', key('down'))
+    ui.handleKeypress('', key('down'))
+    ui.handleKeypress('', key('enter'))
+    ui.handleKeypress('', key('enter'))
+
+    expect(manager.addSession).toHaveBeenCalledWith({
+      type: 'cursor',
+      cmd: 'cursor-agent',
+      args: [],
+      cwd: process.cwd(),
+    })
+  })
+
+  it('opencode選択時は opencode コマンドでセッションを起動する', () => {
+    const initialSession = { id: 'claude-code#1', displayName: 'claude-code 1', status: 'running', logBuffer: [], write: vi.fn() }
+    const addedSession = { id: 'opencode#1', displayName: 'opencode 1', status: 'running', logBuffer: [], write: vi.fn() }
+    const manager = Object.assign(new EventEmitter(), {
+      sessions: [initialSession],
+      selectedIndex: 0,
+      selectedSession: initialSession,
+      selectSession(index: number) {
+        this.selectedIndex = index
+        this.selectedSession = this.sessions[index] ?? null
+        this.emit('selection', this.selectedSession)
+      },
+      addSession: vi.fn(() => {
+        manager.sessions.push(addedSession)
+        return addedSession
+      }),
+      removeSession: vi.fn(),
+    })
+
+    const ui = new OverviewUI(terminal as never, manager as never)
+    ui.show()
+    ui.handleKeypress('n', key('n'))
+    ui.handleKeypress('', key('up'))
+    ui.handleKeypress('', key('up'))
+    ui.handleKeypress('', key('enter'))
+    ui.handleKeypress('', key('enter'))
+
+    expect(manager.addSession).toHaveBeenCalledWith({
+      type: 'opencode',
+      cmd: 'opencode',
+      args: [],
+      cwd: process.cwd(),
+    })
+  })
+
+  it('antigravity-cli選択時は agy コマンドでセッションを起動する', () => {
+    const initialSession = { id: 'claude-code#1', displayName: 'claude-code 1', status: 'running', logBuffer: [], write: vi.fn() }
+    const addedSession = { id: 'antigravity-cli#1', displayName: 'antigravity-cli 1', status: 'running', logBuffer: [], write: vi.fn() }
+    const manager = Object.assign(new EventEmitter(), {
+      sessions: [initialSession],
+      selectedIndex: 0,
+      selectedSession: initialSession,
+      selectSession(index: number) {
+        this.selectedIndex = index
+        this.selectedSession = this.sessions[index] ?? null
+        this.emit('selection', this.selectedSession)
+      },
+      addSession: vi.fn(() => {
+        manager.sessions.push(addedSession)
+        return addedSession
+      }),
+      removeSession: vi.fn(),
+    })
+
+    const ui = new OverviewUI(terminal as never, manager as never)
+    ui.show()
+    ui.handleKeypress('n', key('n'))
+    ui.handleKeypress('', key('up'))
+    ui.handleKeypress('', key('enter'))
+    ui.handleKeypress('', key('enter'))
+
+    expect(manager.addSession).toHaveBeenCalledWith({
+      type: 'antigravity-cli',
+      cmd: 'agy',
+      args: [],
+      cwd: process.cwd(),
+    })
+  })
+
   it('n で追加したセッションは設定済みの cmd と args を優先する', () => {
     const initialSession = { id: 'claude-code#1', displayName: 'claude-code 1', status: 'running', logBuffer: [], write: vi.fn() }
     const addedSession = { id: 'claude-code#2', displayName: 'claude-code 2', status: 'running', logBuffer: [], write: vi.fn() }
@@ -426,5 +532,51 @@ describe('OverviewUI', () => {
 
     expect(manager.selectedSession).toBe(waitingSession)
     expect(terminal.rendered).toContain('> ○ gemini-cli#1  waiting')
+  })
+
+  it('e で選択中セッションの表示名を編集できる', () => {
+    const session = {
+      id: 'codex#1',
+      type: 'codex',
+      displayName: 'codex 1',
+      status: 'running',
+      logBuffer: [],
+      write: vi.fn(),
+      setDisplayName: vi.fn(function (name: string) {
+        this.displayName = name
+      }),
+    }
+    const manager = Object.assign(new EventEmitter(), {
+      sessions: [session],
+      selectedIndex: 0,
+      selectedSession: session,
+      selectSession: vi.fn(),
+      addSession: vi.fn(),
+      removeSession: vi.fn(),
+    })
+
+    const ui = new OverviewUI(terminal as never, manager as never)
+    ui.show()
+    ui.handleKeypress('e', key('e'))
+    ui.handleKeypress('', key('backspace'))
+    ui.handleKeypress('', key('backspace'))
+    ui.handleKeypress('', key('backspace'))
+    ui.handleKeypress('', key('backspace'))
+    ui.handleKeypress('', key('backspace'))
+    ui.handleKeypress('', key('backspace'))
+    ui.handleKeypress('', key('backspace'))
+    ui.handleKeypress('f', key('f'))
+    ui.handleKeypress('i', key('i'))
+    ui.handleKeypress('x', key('x'))
+    ui.handleKeypress(' ', key(' '))
+    ui.handleKeypress('l', key('l'))
+    ui.handleKeypress('a', key('a'))
+    ui.handleKeypress('t', key('t'))
+    ui.handleKeypress('e', key('e'))
+    ui.handleKeypress('r', key('r'))
+    ui.handleKeypress('', key('enter'))
+
+    expect(session.setDisplayName).toHaveBeenCalledWith('fix later')
+    expect(terminal.rendered).toContain('> ⣾ fix later (codex)  working')
   })
 })

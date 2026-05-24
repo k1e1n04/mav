@@ -60,6 +60,30 @@ describe('loadConfig', () => {
     expect(config.agents[0].args).toEqual([])
   })
 
+  it('cursorのデフォルトcmdはcursor-agent', () => {
+    const yaml = `agents:\n  - type: cursor\n`
+    writeFileSync(join(TMP, 'config.yaml'), yaml)
+    const config = loadConfig(join(TMP, 'config.yaml'))
+    expect(config.agents[0].cmd).toBe('cursor-agent')
+    expect(config.agents[0].args).toEqual([])
+  })
+
+  it('opencodeのデフォルトcmdはopencode', () => {
+    const yaml = `agents:\n  - type: opencode\n`
+    writeFileSync(join(TMP, 'config.yaml'), yaml)
+    const config = loadConfig(join(TMP, 'config.yaml'))
+    expect(config.agents[0].cmd).toBe('opencode')
+    expect(config.agents[0].args).toEqual([])
+  })
+
+  it('antigravity-cliのデフォルトcmdはagy', () => {
+    const yaml = `agents:\n  - type: antigravity-cli\n`
+    writeFileSync(join(TMP, 'config.yaml'), yaml)
+    const config = loadConfig(join(TMP, 'config.yaml'))
+    expect(config.agents[0].cmd).toBe('agy')
+    expect(config.agents[0].args).toEqual([])
+  })
+
   it('args が配列でない場合はデフォルトargsにフォールバックする', () => {
     const yaml = `agents:\n  - type: codex\n    args: nope\n`
     writeFileSync(join(TMP, 'config.yaml'), yaml)

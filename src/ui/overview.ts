@@ -8,6 +8,7 @@ import type { KeyInfo, TerminalUI } from './terminal.js'
 type PromptState =
   | { mode: 'agent'; selectedIndex: number }
   | { mode: 'cwd'; agentType: string; value: string; candidates: string[] }
+  | { mode: 'rename'; sessionId: string; value: string }
   | { mode: 'error'; message: string }
   | null
 
@@ -32,7 +33,7 @@ export class OverviewUI {
     { status: 'error', label: 'Failed' },
   ] as const
 
-  private static readonly AGENT_TYPES = ['claude-code', 'codex', 'gemini-cli', 'copilot'] as const
+  private static readonly AGENT_TYPES = ['claude-code', 'codex', 'gemini-cli', 'copilot', 'cursor', 'opencode', 'antigravity-cli'] as const
 
   private terminal: TerminalUI
   private manager: SessionManager
@@ -93,6 +94,10 @@ export class OverviewUI {
       this.handleCwdPromptKeypress(key)
       return
     }
+    if (this.promptState?.mode === 'rename') {
+      this.handleRenamePromptKeypress(key)
+      return
+    }
     if (this.promptState?.mode === 'error') {
       if (key.name === 'enter' || key.name === 'return' || key.name === 'escape' || str === 'q') {
         this.promptState = null
@@ -113,6 +118,11 @@ export class OverviewUI {
 
     if (str === 'n') {
       this.showAddPrompt()
+      return
+    }
+
+    if (str === 'e') {
+      this.showRenamePrompt()
       return
     }
 
@@ -202,9 +212,59 @@ export class OverviewUI {
     }
   }
 
+  private handleRenamePromptKeypress(key: KeyInfo): void {
+    const state = this.promptState
+    if (!state || state.mode !== 'rename') return
+
+    if (key.name === 'escape') {
+      this.promptState = null
+      this.render()
+      return
+    }
+
+    if (key.name === 'enter' || key.name === 'return') {
+      const session = this.manager.sessions.find((candidate) => candidate.id === state.sessionId)
+      const value = state.value.trim()
+      this.promptState = null
+      if (session && value.length >= 3) {
+        if ('setDisplayName' in session && typeof session.setDisplayName === 'function') {
+          session.setDisplayName(value)
+        } else {
+          session.displayName = value
+        }
+      }
+      this.syncList()
+      this.render()
+      return
+    }
+
+    if (key.name === 'backspace') {
+      state.value = state.value.slice(0, -1)
+      this.render()
+      return
+    }
+
+    if (!key.ctrl && !key.meta && key.sequence?.length === 1) {
+      state.value += key.sequence
+      this.render()
+    }
+  }
+
   private showAddPrompt(): void {
     if (this.promptState) return
     this.promptState = { mode: 'agent', selectedIndex: 0 }
+    this.render()
+  }
+
+  private showRenamePrompt(): void {
+    if (this.promptState) return
+    const session = this.manager.selectedSession
+    if (!session) return
+    this.promptState = {
+      mode: 'rename',
+      sessionId: session.id,
+      value: session.displayName ?? session.id,
+    }
     this.render()
   }
 
@@ -550,7 +610,7 @@ export class OverviewUI {
     }
 
     lines.push(this.color(this.makeRule('controls', width), OverviewUI.ANSI.dim))
-    lines.push(...this.wrapPlainText('↑/↓ or j/k move   Enter detail   Ctrl+] back   n new   d delete   q quit', width))
+    lines.push(...this.wrapPlainText('↑/↓ or j/k move   Enter detail   Ctrl+] back   n new   e rename   d delete   q quit', width))
     return this.finalizeLines(lines)
   }
 
@@ -583,6 +643,14 @@ export class OverviewUI {
       }
       lines.push('')
       lines.push(...this.wrapPlainText('Tab: complete  Enter: confirm  Esc: cancel', width))
+      return this.finalizeLines(lines)
+    }
+
+    if (state.mode === 'rename') {
+      lines.push(this.fitPlain('rename session', width))
+      lines.push(...this.wrapPlainText(state.value, width))
+      lines.push('')
+      lines.push(...this.wrapPlainText('Enter: confirm  Esc: cancel', width))
       return this.finalizeLines(lines)
     }
 

@@ -5,6 +5,9 @@ export const DEFAULT_CMDS: Record<string, { cmd: string; args: string[]; resumeA
   'codex': { cmd: 'codex', args: [] },
   'gemini-cli': { cmd: 'gemini', args: [] },
   'copilot': { cmd: 'copilot', args: [] },
+  'cursor': { cmd: 'cursor-agent', args: [] },
+  'opencode': { cmd: 'opencode', args: [] },
+  'antigravity-cli': { cmd: 'agy', args: [] },
 }
 
 export function getAgentDefaults(type: string): { cmd: string; args: string[]; resumeArgs?: string[] } {
