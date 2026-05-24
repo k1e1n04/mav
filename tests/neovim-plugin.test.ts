@@ -74,6 +74,132 @@ qa!
     expect(output.trim()).toContain(projectDir)
   })
 
+  it('MavFollowNow keeps cwd when opening a file in a newly split window', () => {
+    const root = join(tmpdir(), `mav-plugin-split-${Date.now()}`)
+    const projectDir = join(root, 'project-c')
+    const filePath = join(projectDir, 'notes.md')
+    const statePath = join(root, 'current-session.json')
+    tempRoots.push(root)
+
+    mkdirSync(projectDir, { recursive: true })
+    writeFileSync(filePath, '# notes\n', 'utf8')
+    writeFileSync(
+      statePath,
+      JSON.stringify({
+        sessionId: 'codex#1',
+        agentType: 'codex',
+        displayName: 'split follow',
+        cwd: projectDir,
+        updatedAt: '2026-05-24T12:34:56.000Z',
+      }),
+      'utf8',
+    )
+
+    const output = runNvimScript(`
+set rtp+=${repoRoot}
+runtime plugin/mav.lua
+lua << EOF
+require("mav").setup({
+  state_file = ${JSON.stringify(statePath)},
+  auto_follow = false,
+  notify_on_switch = false,
+})
+vim.cmd("cd " .. vim.fn.fnameescape(${JSON.stringify(root)}))
+vim.cmd("MavFollowNow")
+vim.cmd("vsplit")
+vim.cmd("edit " .. vim.fn.fnameescape(${JSON.stringify(filePath)}))
+print(vim.fn.getcwd())
+EOF
+qa!
+`)
+
+    expect(output.trim()).toContain(projectDir)
+  })
+
+  it('MavFollowNow keeps cwd when opening a file in a new tab', () => {
+    const root = join(tmpdir(), `mav-plugin-tab-${Date.now()}`)
+    const projectDir = join(root, 'project-d')
+    const filePath = join(projectDir, 'todo.md')
+    const statePath = join(root, 'current-session.json')
+    tempRoots.push(root)
+
+    mkdirSync(projectDir, { recursive: true })
+    writeFileSync(filePath, '- item\n', 'utf8')
+    writeFileSync(
+      statePath,
+      JSON.stringify({
+        sessionId: 'codex#1',
+        agentType: 'codex',
+        displayName: 'tab follow',
+        cwd: projectDir,
+        updatedAt: '2026-05-24T12:35:56.000Z',
+      }),
+      'utf8',
+    )
+
+    const output = runNvimScript(`
+set rtp+=${repoRoot}
+runtime plugin/mav.lua
+lua << EOF
+require("mav").setup({
+  state_file = ${JSON.stringify(statePath)},
+  auto_follow = false,
+  notify_on_switch = false,
+})
+vim.cmd("cd " .. vim.fn.fnameescape(${JSON.stringify(root)}))
+vim.cmd("MavFollowNow")
+vim.cmd("tabnew")
+vim.cmd("edit " .. vim.fn.fnameescape(${JSON.stringify(filePath)}))
+print(vim.fn.getcwd())
+EOF
+qa!
+`)
+
+    expect(output.trim()).toContain(projectDir)
+  })
+
+  it('poll_once re-applies the session cwd even when current-session.json is unchanged', () => {
+    const root = join(tmpdir(), `mav-plugin-poll-${Date.now()}`)
+    const projectDir = join(root, 'project-e')
+    const statePath = join(root, 'current-session.json')
+    tempRoots.push(root)
+
+    mkdirSync(projectDir, { recursive: true })
+    writeFileSync(
+      statePath,
+      JSON.stringify({
+        sessionId: 'codex#1',
+        agentType: 'codex',
+        displayName: 'poll follow',
+        cwd: projectDir,
+        updatedAt: '2026-05-24T12:36:56.000Z',
+      }),
+      'utf8',
+    )
+
+    const output = runNvimScript(`
+set rtp+=${repoRoot}
+runtime plugin/mav.lua
+lua << EOF
+local mav = require("mav")
+mav.setup({
+  state_file = ${JSON.stringify(statePath)},
+  auto_follow = true,
+  notify_on_switch = false,
+})
+mav.stop()
+vim.cmd("cd " .. vim.fn.fnameescape(${JSON.stringify(root)}))
+mav.follow_now()
+vim.cmd("cd " .. vim.fn.fnameescape(${JSON.stringify(root)}))
+mav.poll_once()
+print(vim.fn.getcwd())
+EOF
+qa!
+`)
+
+    expect(output.trim()).toContain(projectDir)
+  })
+
   it('MavStatus prints the selected session details', () => {
     const root = join(tmpdir(), `mav-plugin-status-${Date.now()}`)
     const projectDir = join(root, 'project-b')
