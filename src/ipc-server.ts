@@ -32,6 +32,7 @@ export function createServer(socketPath: string): IpcServer {
 
         server = netCreateServer((socket: Socket) => {
           let buf = ''
+          socket.on('error', () => {}) // absorb socket errors (e.g. ECONNRESET)
           socket.on('data', (chunk) => {
             buf += chunk.toString()
             const lines = buf.split('\n')
@@ -53,6 +54,7 @@ export function createServer(socketPath: string): IpcServer {
         server.once('error', reject)
         server.listen(socketPath, () => {
           server!.removeListener('error', reject)
+          server!.on('error', () => {}) // absorb post-bind server errors
           resolve()
         })
       })
