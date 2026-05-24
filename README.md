@@ -114,6 +114,21 @@ agents:
 | `opencode` | `opencode` |
 | `antigravity-cli` | `agy` |
 
+## CWD Tracking
+
+mav tracks each agent's working directory. When an agent changes directory (e.g., via `git worktree`), the Overview panel reflects the new path.
+
+| Agent | CWD Tracking | Hook Auto-injection |
+|---|---|---|
+| `claude-code` | IPC + PostToolUse hook | ✅ Auto-injected via `--settings` |
+| `gemini-cli` | IPC + AfterTool hook | ✅ Auto-injected via `.gemini/settings.local.json` |
+| `codex` | IPC + PostToolUse hook | ✅ Auto-injected via `--profile-v2` |
+| `copilot` | lsof polling only | ❌ Not supported (no hook API) |
+| Other | lsof polling only | ❌ Not supported |
+
+> **Copilot** and unlisted agents use process polling to track the working directory.
+> Directory changes made in child processes (e.g., git worktrees) may not be detected.
+
 ## Keybindings
 
 | Key | Scope | Action |
