@@ -2,6 +2,7 @@ import type { SessionManager } from '../session-manager.js'
 import type { AgentSession } from '../agent.js'
 import type { AgentConfig } from '../config.js'
 import { getAgentDefaults, resolveSessionArgs } from '../agent-launch.js'
+import { buildHookArgs } from '../hook-injector.js'
 import { completePath } from './path-completion.js'
 import type { KeyInfo, TerminalUI } from './terminal.js'
 
@@ -39,6 +40,7 @@ export class OverviewUI {
   private manager: SessionManager
   private onSessionCreated?: (session: SessionManager['selectedSession']) => void
   private agentConfigs: AgentConfig[]
+  private socketPath: string | undefined
   private promptState: PromptState = null
   private displaySessionIds: string[] = []
   private visible = false
@@ -48,11 +50,13 @@ export class OverviewUI {
     manager: SessionManager,
     onSessionCreated?: (session: SessionManager['selectedSession']) => void,
     agentConfigs: AgentConfig[] = [],
+    socketPath?: string,
   ) {
     this.terminal = terminal
     this.manager = manager
     this.onSessionCreated = onSessionCreated
     this.agentConfigs = agentConfigs
+    this.socketPath = socketPath
 
     this.syncList()
 
@@ -275,12 +279,27 @@ export class OverviewUI {
       ...getAgentDefaults(agentType),
     }
     const { args, newSessionId } = resolveSessionArgs(agentType, defaults.args, undefined, false)
+
+    let hookedArgs = args
+    let hookFiles: string[] = []
+    if (this.socketPath) {
+      try {
+        const hookCmd = `mav report cwd "$(pwd)"`
+        const hookResult = buildHookArgs(agentType, args, hookCmd, { cwd })
+        hookedArgs = hookResult.args
+        hookFiles = hookResult.hookFiles
+      } catch {
+        // hook injection failed — start agent without hooks
+      }
+    }
+
+    const ipcContext = this.socketPath ? { socketPath: this.socketPath, hookFiles } : undefined
     const session = this.manager.addSession({
       type: agentType,
       cmd: defaults.cmd,
-      args,
+      args: hookedArgs,
       cwd,
-    }) as AgentSession & { sessionId?: string }
+    }, ipcContext) as AgentSession & { sessionId?: string }
     session.baseArgs = defaults.args
     if (newSessionId != null) {
       session.sessionId = newSessionId

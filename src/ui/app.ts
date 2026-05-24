@@ -22,6 +22,7 @@ export class App {
     statePath: string,
     terminal = new TerminalUI(),
     agentConfigs: AgentConfig[] = [],
+    socketPath?: string,
   ) {
     this.manager = manager
     this.statePath = statePath
@@ -31,7 +32,7 @@ export class App {
       if (session) {
         this.switchToDetail(session)
       }
-    }, agentConfigs)
+    }, agentConfigs, socketPath)
     this.detailUI = new DetailUI(terminal, () => {
       if (this.mode === 'detail') {
         this.switchToOverview()

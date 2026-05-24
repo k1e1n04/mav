@@ -119,7 +119,7 @@ describe('OverviewUI', () => {
       cmd: 'copilot',
       args: ['--session-id', expect.any(String)],
       cwd: process.cwd(),
-    })
+    }, undefined)
   })
 
   it('cursor選択時は cursor-agent コマンドでセッションを起動する', () => {
@@ -156,7 +156,7 @@ describe('OverviewUI', () => {
       cmd: 'cursor-agent',
       args: [],
       cwd: process.cwd(),
-    })
+    }, undefined)
   })
 
   it('opencode選択時は opencode コマンドでセッションを起動する', () => {
@@ -191,7 +191,7 @@ describe('OverviewUI', () => {
       cmd: 'opencode',
       args: [],
       cwd: process.cwd(),
-    })
+    }, undefined)
   })
 
   it('antigravity-cli選択時は agy コマンドでセッションを起動する', () => {
@@ -225,7 +225,7 @@ describe('OverviewUI', () => {
       cmd: 'agy',
       args: [],
       cwd: process.cwd(),
-    })
+    }, undefined)
   })
 
   it('n で追加したセッションは設定済みの cmd と args を優先する', () => {
@@ -263,7 +263,7 @@ describe('OverviewUI', () => {
       cmd: 'claude-launcher',
       args: ['--dangerously-skip-permissions', '--session-id', expect.any(String)],
       cwd: process.cwd(),
-    })
+    }, undefined)
   })
 
   it('n で追加したセッションは process.cwd() を cwd として起動する', () => {
@@ -298,8 +298,40 @@ describe('OverviewUI', () => {
       cmd: 'codex',
       args: [],
       cwd: '/tmp/project-a',
-    })
+    }, undefined)
     cwdSpy.mockRestore()
+  })
+
+  it('socketPath が渡された場合、spawnAgent は ipcContext を addSession へ渡す', () => {
+    const initialSession = { id: 'claude-code#1', displayName: 'claude-code 1', status: 'running', logBuffer: [], write: vi.fn() }
+    const addedSession = { id: 'codex#1', displayName: 'codex 1', status: 'running', logBuffer: [], write: vi.fn() }
+    const manager = Object.assign(new EventEmitter(), {
+      sessions: [initialSession],
+      selectedIndex: 0,
+      selectedSession: initialSession,
+      selectSession(index: number) {
+        this.selectedIndex = index
+        this.selectedSession = this.sessions[index] ?? null
+        this.emit('selection', this.selectedSession)
+      },
+      addSession: vi.fn(() => {
+        manager.sessions.push(addedSession)
+        return addedSession
+      }),
+      removeSession: vi.fn(),
+    })
+
+    const ui = new OverviewUI(terminal as never, manager as never, undefined, [], '/tmp/mav-test.sock')
+    ui.show()
+    ui.handleKeypress('n', key('n'))
+    ui.handleKeypress('', key('down'))
+    ui.handleKeypress('', key('enter'))
+    ui.handleKeypress('', key('enter'))
+
+    const [, ipcContext] = (manager.addSession as ReturnType<typeof vi.fn>).mock.calls[0] as [unknown, { socketPath: string; hookFiles: string[] }]
+    expect(ipcContext).toBeDefined()
+    expect(ipcContext.socketPath).toBe('/tmp/mav-test.sock')
+    expect(Array.isArray(ipcContext.hookFiles)).toBe(true)
   })
 
   it('n の cwd 入力は狭い幅でもパスを折り返して表示する', () => {
