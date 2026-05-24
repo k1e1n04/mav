@@ -36,8 +36,9 @@ export function start(options: StartOptions = {}): SessionManager {
   // Start IPC server for cwd tracking (non-blocking)
   const socketPath = join(tmpdir(), `mav-${process.pid}.sock`)
   const ipcServer = createServer(socketPath)
-  ipcServer.listen().catch(() => {
-    // IPC server start failed — continue without IPC tracking
+  ipcServer.listen().catch((err: unknown) => {
+    const msg = err instanceof Error ? err.message : String(err)
+    process.stderr.write(`mav: IPC server failed to start (${msg}), cwd tracking disabled\n`)
   })
 
   const manager = new SessionManager()
@@ -74,12 +75,15 @@ export function start(options: StartOptions = {}): SessionManager {
 
     const restoredCwd = savedSession?.cwd
     const hookCmd = `mav report cwd "$(pwd)"`
-    const { args: hookedArgs, hookFiles } = buildHookArgs(
-      agentConfig.type,
-      args,
-      hookCmd,
-      { cwd: restoredCwd },
-    )
+    let hookedArgs = args
+    let hookFiles: string[] = []
+    try {
+      const hookResult = buildHookArgs(agentConfig.type, args, hookCmd, { cwd: restoredCwd })
+      hookedArgs = hookResult.args
+      hookFiles = hookResult.hookFiles
+    } catch {
+      // hook file I/O failed — start agent without hooks
+    }
     const session = manager.addSession(
       { ...agentConfig, args: hookedArgs, ...(restoredCwd != null && { cwd: restoredCwd }) },
       { socketPath, hookFiles },
@@ -105,12 +109,15 @@ export function start(options: StartOptions = {}): SessionManager {
         true,
       )
       const hookCmd = `mav report cwd "$(pwd)"`
-      const { args: hookedArgs, hookFiles } = buildHookArgs(
-        rc.type,
-        args,
-        hookCmd,
-        { cwd: savedSession.cwd },
-      )
+      let hookedArgs = args
+      let hookFiles: string[] = []
+      try {
+        const hookResult = buildHookArgs(rc.type, args, hookCmd, { cwd: savedSession.cwd })
+        hookedArgs = hookResult.args
+        hookFiles = hookResult.hookFiles
+      } catch {
+        // hook file I/O failed — start agent without hooks
+      }
       const session = manager.addSession(
         { type: rc.type, cmd: rc.cmd, args: hookedArgs, ...(savedSession.cwd != null && { cwd: savedSession.cwd }) },
         { socketPath, hookFiles },
