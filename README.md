@@ -120,12 +120,14 @@ mav tracks each agent's working directory. When an agent changes directory (e.g.
 
 | Agent | CWD Tracking | Hook Auto-injection |
 |---|---|---|
-| `claude-code` | IPC + PostToolUse hook | ✅ Auto-injected via `--settings` |
+| `claude-code` | child PID polling + OSC 7 | ❌ No injection needed |
 | `gemini-cli` | IPC + AfterTool hook | ✅ Auto-injected via `.gemini/settings.local.json` |
 | `codex` | IPC + PostToolUse hook | ✅ Auto-injected via `--profile-v2` |
 | `copilot` | IPC + PostToolUse hook | ✅ Auto-injected via `.github/hooks/*.json` |
 | `cursor` | lsof polling only | ❌ Not supported |
 | Other | lsof polling only | ❌ Not supported |
+
+`claude-code` CWD tracking works by finding the Claude Code process (direct child of the shell PTY) and polling its own working directory. This correctly captures `process.chdir()` calls made by Claude Code when switching git worktrees, without any hook injection.
 
 > **Cursor** and unlisted agents use process polling to track the working directory.
 > Directory changes made in child processes (e.g., git worktrees) may not be detected.
