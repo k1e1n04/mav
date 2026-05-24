@@ -67,6 +67,7 @@ export class AgentSession extends EventEmitter {
       this.exited = true
       this.status = 'error'
       this.logBuffer.push(`Error: failed to spawn '${config.cmd}': ${msg}\r\n`)
+      cleanupHookFiles(this.hookFiles)
       process.nextTick(() => this.emit('exit', 1))
       return
     }
