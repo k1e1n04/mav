@@ -8,6 +8,8 @@ export interface AgentConfig {
   args: string[]
   cwd?: string
   resumeArgs?: string[]
+  /** Path to a settings file owned by the wrapper cmd; mav merges PostToolUse hook there */
+  settingsFile?: string
 }
 
 export interface MavConfig {
@@ -24,14 +26,14 @@ export function loadConfig(configPath: string): MavConfig {
   }
 
   const raw = readFileSync(configPath, 'utf-8')
-  const parsed = yamlLoad(raw) as { agents?: Array<{ type: string; cmd?: string; args?: string[] }> }
+  const parsed = yamlLoad(raw) as { agents?: Array<{ type: string; cmd?: string; args?: string[]; settingsFile?: string }> }
 
   if (!parsed?.agents || !Array.isArray(parsed.agents)) {
     return DEFAULT_CONFIG
   }
 
   const agents: AgentConfig[] = parsed.agents
-    .filter((a): a is { type: string; cmd?: string; args?: string[]; cwd?: string; resumeArgs?: string[] } =>
+    .filter((a): a is { type: string; cmd?: string; args?: string[]; cwd?: string; resumeArgs?: string[]; settingsFile?: string } =>
       typeof a?.type === 'string' && a.type.length > 0
     )
     .map((a) => {
@@ -42,12 +44,16 @@ export function loadConfig(configPath: string): MavConfig {
       const cwd = typeof a.cwd === 'string' && a.cwd.trim().length > 0
         ? a.cwd.replace(/^~/, process.env.HOME ?? '~')
         : undefined
+      const settingsFile = typeof a.settingsFile === 'string' && a.settingsFile.trim().length > 0
+        ? a.settingsFile
+        : undefined
       return {
         type: a.type,
         cmd,
         args: Array.isArray(a.args) ? a.args : defaults.args,
         cwd,
         resumeArgs: Array.isArray(a.resumeArgs) ? a.resumeArgs : defaults.resumeArgs,
+        settingsFile,
       }
     })
 

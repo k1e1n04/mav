@@ -132,4 +132,25 @@ describe('loadConfig', () => {
     const config = loadConfig(join(TMP, 'config.yaml'))
     expect(config.agents[0].cwd).toBeUndefined()
   })
+
+  it('settingsFile を指定するとそのまま保持される', () => {
+    const yaml = `agents:\n  - type: claude-code\n    cmd: claude-launcher\n    settingsFile: /tmp/overlay.json\n`
+    writeFileSync(join(TMP, 'config.yaml'), yaml)
+    const config = loadConfig(join(TMP, 'config.yaml'))
+    expect(config.agents[0].settingsFile).toBe('/tmp/overlay.json')
+  })
+
+  it('settingsFile の ~ は HOME に展開されない（hook-injector 側で展開する）', () => {
+    const yaml = `agents:\n  - type: claude-code\n    cmd: claude-launcher\n    settingsFile: ~/.litellm/overlay.json\n`
+    writeFileSync(join(TMP, 'config.yaml'), yaml)
+    const config = loadConfig(join(TMP, 'config.yaml'))
+    expect(config.agents[0].settingsFile).toBe('~/.litellm/overlay.json')
+  })
+
+  it('settingsFile を指定しない場合は undefined になる', () => {
+    const yaml = `agents:\n  - type: claude-code\n`
+    writeFileSync(join(TMP, 'config.yaml'), yaml)
+    const config = loadConfig(join(TMP, 'config.yaml'))
+    expect(config.agents[0].settingsFile).toBeUndefined()
+  })
 })
