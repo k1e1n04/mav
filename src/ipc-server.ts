@@ -40,26 +40,31 @@ export function createServer(socketPath: string): IpcServer {
               if (!line.trim()) continue
               try {
                 const msg = JSON.parse(line) as IpcMessage
-                if (msg.type && msg.sessionId) {
+                if (msg.type && msg.sessionId && typeof msg.path === 'string') {
                   handlers.forEach((h) => h(msg))
                 }
               } catch {
-                // 不正なJSONは無視する
+                // ignore
               }
             }
           })
         })
 
         server.once('error', reject)
-        server.listen(socketPath, () => resolve())
+        server.listen(socketPath, () => {
+          server!.removeListener('error', reject)
+          resolve()
+        })
       })
     },
 
     close() {
-      server?.close()
+      const closingServer = server
+      server = null
       if (existsSync(socketPath)) {
         try { unlinkSync(socketPath) } catch { /* ignore */ }
       }
+      closingServer?.close()
     },
   }
 }
