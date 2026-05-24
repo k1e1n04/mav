@@ -431,6 +431,33 @@ export class OverviewUI {
     return lines
   }
 
+  private wrapPathText(text: string, width: number): string[] {
+    if (width <= 0) return ['']
+    if (text.length <= width) return [text]
+
+    const lines: string[] = []
+    let remaining = text
+
+    while (remaining.length > width) {
+      const slice = remaining.slice(0, width + 1)
+      const breakIndex = slice.lastIndexOf('/')
+      if (breakIndex > 0) {
+        lines.push(remaining.slice(0, breakIndex))
+        remaining = remaining.slice(breakIndex)
+        continue
+      }
+
+      lines.push(remaining.slice(0, width))
+      remaining = remaining.slice(width)
+    }
+
+    if (remaining.length > 0) {
+      lines.push(remaining)
+    }
+
+    return lines
+  }
+
   private wrapVisibleParts(parts: string[], width: number): string[] {
     if (width <= 0) return ['']
 
@@ -538,12 +565,12 @@ export class OverviewUI {
 
     if (state.mode === 'cwd') {
       lines.push(this.fitPlain(`cwd for ${state.agentType}`, width))
-      lines.push(this.fitPlain(state.value, width))
+      lines.push(...this.wrapPathText(state.value, width))
       if (state.candidates.length > 1) {
         lines.push('')
         lines.push(this.fitPlain('Candidates:', width))
         for (const candidate of state.candidates.slice(0, 8)) {
-          lines.push(this.fitPlain(`  ${candidate}`, width))
+          lines.push(...this.wrapPathText(`  ${candidate}`, width))
         }
       }
       lines.push('')

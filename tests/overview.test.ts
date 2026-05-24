@@ -158,6 +158,33 @@ describe('OverviewUI', () => {
     cwdSpy.mockRestore()
   })
 
+  it('n の cwd 入力は狭い幅でもパスを折り返して表示する', () => {
+    terminal.cols = 24
+    const manager = Object.assign(new EventEmitter(), {
+      sessions: [],
+      selectedIndex: -1,
+      selectedSession: null,
+      selectSession: vi.fn(),
+      addSession: vi.fn(),
+      removeSession: vi.fn(),
+    })
+    const cwdSpy = vi.spyOn(process, 'cwd').mockReturnValue('/tmp/projects/very/long/path')
+
+    const ui = new OverviewUI(terminal as never, manager as never)
+    ui.show()
+    ui.handleKeypress('n', key('n'))
+    ui.handleKeypress('', key('down'))
+    ui.handleKeypress('', key('enter'))
+
+    const plainLines = stripAnsi(terminal.rendered).split('\n')
+
+    expect(plainLines).toContain(' /tmp/projects/very')
+    expect(plainLines).toContain(' /long/path')
+    expect(Math.max(...plainLines.map((line) => line.length))).toBeLessThanOrEqual(24)
+
+    cwdSpy.mockRestore()
+  })
+
   it('一覧には各セッションの状態ラベルを同じ行で表示し、状態ごとに並べる', () => {
     const firstSession = { id: 'claude-code#2', type: 'codex', displayName: 'fix recording bug', status: 'done', logBuffer: ['thinking...\r\n'], write: vi.fn() }
     const secondSession = { id: 'codex#1', type: 'codex', displayName: 'codex 1', status: 'running', logBuffer: ['completed successfully\r\n'], write: vi.fn() }
