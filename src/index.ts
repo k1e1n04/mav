@@ -1,4 +1,4 @@
-import { homedir } from 'node:os'
+import { homedir, tmpdir } from 'node:os'
 import { join, dirname } from 'node:path'
 import { loadConfig } from './config.js'
 import { clearCurrentSessionState, saveCurrentSessionState } from './current-session.js'
@@ -7,6 +7,8 @@ import { SessionManager } from './session-manager.js'
 import { App } from './ui/app.js'
 import type { AgentSession } from './agent.js'
 import { resolveSessionArgs } from './agent-launch.js'
+import { createServer } from './ipc-server.js'
+import { buildHookArgs } from './hook-injector.js'
 
 export interface StartOptions {
   configPath?: string
@@ -30,6 +32,13 @@ export function start(options: StartOptions = {}): SessionManager {
   }
 
   const savedState = loadState(statePath)
+
+  // Start IPC server for cwd tracking (non-blocking)
+  const socketPath = join(tmpdir(), `mav-${process.pid}.sock`)
+  const ipcServer = createServer(socketPath)
+  ipcServer.listen().catch(() => {
+    // IPC server start failed — continue without IPC tracking
+  })
 
   const manager = new SessionManager()
   const app = new App(manager, statePath, undefined, config.agents)
@@ -64,11 +73,17 @@ export function start(options: StartOptions = {}): SessionManager {
     )
 
     const restoredCwd = savedSession?.cwd
-    const session = manager.addSession({
-      ...agentConfig,
+    const hookCmd = `mav report cwd "$(pwd)"`
+    const { args: hookedArgs, hookFiles } = buildHookArgs(
+      agentConfig.type,
       args,
-      ...(restoredCwd != null && { cwd: restoredCwd }),
-    }) as AgentSession & { sessionId?: string }
+      hookCmd,
+      { cwd: restoredCwd },
+    )
+    const session = manager.addSession(
+      { ...agentConfig, args: hookedArgs, ...(restoredCwd != null && { cwd: restoredCwd }) },
+      { socketPath, hookFiles },
+    ) as AgentSession & { sessionId?: string }
     session.baseArgs = agentConfig.args
     configSessionIds.add(session.id)
 
@@ -89,12 +104,17 @@ export function start(options: StartOptions = {}): SessionManager {
         savedSession.sessionId,
         true,
       )
-      const session = manager.addSession({
-        type: rc.type,
-        cmd: rc.cmd,
+      const hookCmd = `mav report cwd "$(pwd)"`
+      const { args: hookedArgs, hookFiles } = buildHookArgs(
+        rc.type,
         args,
-        ...(savedSession.cwd != null && { cwd: savedSession.cwd }),
-      }) as AgentSession & { sessionId?: string }
+        hookCmd,
+        { cwd: savedSession.cwd },
+      )
+      const session = manager.addSession(
+        { type: rc.type, cmd: rc.cmd, args: hookedArgs, ...(savedSession.cwd != null && { cwd: savedSession.cwd }) },
+        { socketPath, hookFiles },
+      ) as AgentSession & { sessionId?: string }
       session.baseArgs = rc.args
       if (newSessionId != null) {
         session.sessionId = newSessionId
@@ -135,12 +155,19 @@ export function start(options: StartOptions = {}): SessionManager {
 
   publishSelectedSession()
 
+  ipcServer.onMessage((msg) => {
+    if (msg.type === 'cwd') {
+      const session = manager.sessions.find((s) => s.id === msg.sessionId)
+      session?.notifyCwd(msg.path)
+    }
+  })
+
   // q/Ctrl+C 以外の終了（ウィンドウ閉じ等）でも state を保存する
   const saveOnExit = () => {
     try { saveState(statePath, manager) } catch { /* ignore */ }
   }
-  process.once('SIGTERM', () => { saveOnExit(); process.exit(0) })
-  process.once('SIGHUP', () => { saveOnExit(); process.exit(0) })
+  process.once('SIGTERM', () => { ipcServer.close(); saveOnExit(); process.exit(0) })
+  process.once('SIGHUP', () => { ipcServer.close(); saveOnExit(); process.exit(0) })
 
   app.start()
   return manager

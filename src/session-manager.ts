@@ -1,6 +1,7 @@
 import { EventEmitter } from 'node:events'
 import { AgentSession } from './agent.js'
 import type { AgentConfig } from './config.js'
+import type { IpcContext } from './agent.js'
 import type { MavState } from './state.js'
 
 type SessionListeners = {
@@ -20,8 +21,8 @@ export class SessionManager extends EventEmitter {
     this.emit('selection', this.selectedSession)
   }
 
-  addSession(config: AgentConfig, cols = 80, rows = 24): AgentSession {
-    const session = new AgentSession(config, cols, rows)
+  addSession(config: AgentConfig, ipcContext?: IpcContext, cols = 80, rows = 24): AgentSession {
+    const session = new AgentSession(config, cols, rows, ipcContext)
 
     const onData = (chunk: string) => { this.emit('data', session.id, chunk) }
     const onExit = (code: number) => { this.emit('exit', session.id, code) }

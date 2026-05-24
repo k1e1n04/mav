@@ -14,6 +14,18 @@ const { loadConfigMock, managerAddSessionMock, managerRemoveSessionMock, loadSta
   }
 })
 
+vi.mock('../src/hook-injector.js', () => ({
+  buildHookArgs: (_type: string, args: string[], _hookCmd: string) => ({ args, hookFiles: [] }),
+}))
+
+vi.mock('../src/ipc-server.js', () => ({
+  createServer: () => ({
+    listen: () => Promise.resolve(),
+    onMessage: () => {},
+    close: () => {},
+  }),
+}))
+
 vi.mock('../src/config.js', () => ({
   loadConfig: loadConfigMock,
 }))
@@ -158,7 +170,8 @@ describe('start', () => {
       start()
 
       expect(managerAddSessionMock).toHaveBeenCalledWith(
-        expect.objectContaining({ args: ['--resume', 'prev-uuid-123'] })
+        expect.objectContaining({ args: ['--resume', 'prev-uuid-123'] }),
+        expect.anything(),
       )
     })
 
@@ -173,7 +186,8 @@ describe('start', () => {
       start()
 
       expect(managerAddSessionMock).toHaveBeenCalledWith(
-        expect.objectContaining({ cwd: '/home/user/project-a' })
+        expect.objectContaining({ cwd: '/home/user/project-a' }),
+        expect.anything(),
       )
     })
 
@@ -202,7 +216,8 @@ describe('start', () => {
       start()
 
       expect(managerAddSessionMock).toHaveBeenCalledWith(
-        expect.objectContaining({ args: ['--some-flag', '--resume', 'prev-uuid'] })
+        expect.objectContaining({ args: ['--some-flag', '--resume', 'prev-uuid'] }),
+        expect.anything(),
       )
     })
   })
@@ -236,7 +251,8 @@ describe('start', () => {
       start()
 
       expect(managerAddSessionMock).toHaveBeenCalledWith(
-        expect.objectContaining({ args: ['--resume', 'gemini-prev-uuid'] })
+        expect.objectContaining({ args: ['--resume', 'gemini-prev-uuid'] }),
+        expect.anything(),
       )
     })
   })
@@ -270,7 +286,8 @@ describe('start', () => {
       start()
 
       expect(managerAddSessionMock).toHaveBeenCalledWith(
-        expect.objectContaining({ args: ['--session-id', 'copilot-prev-uuid'] })
+        expect.objectContaining({ args: ['--session-id', 'copilot-prev-uuid'] }),
+        expect.anything(),
       )
     })
   })
@@ -289,7 +306,8 @@ describe('start', () => {
       start()
 
       expect(managerAddSessionMock).toHaveBeenCalledWith(
-        expect.objectContaining({ args: [] })
+        expect.objectContaining({ args: [] }),
+        expect.anything(),
       )
     })
 
@@ -304,7 +322,8 @@ describe('start', () => {
       start()
 
       expect(managerAddSessionMock).toHaveBeenCalledWith(
-        expect.objectContaining({ args: ['resume', '--last'] })
+        expect.objectContaining({ args: ['resume', '--last'] }),
+        expect.anything(),
       )
     })
   })
@@ -447,7 +466,8 @@ describe('start', () => {
 
       expect(managerAddSessionMock).toHaveBeenCalledTimes(2)
       expect(managerAddSessionMock).toHaveBeenCalledWith(
-        expect.objectContaining({ type: 'codex', cmd: 'codex' })
+        expect.objectContaining({ type: 'codex', cmd: 'codex' }),
+        expect.anything(),
       )
     })
 
@@ -490,7 +510,8 @@ describe('start', () => {
       start()
 
       expect(managerAddSessionMock).toHaveBeenCalledWith(
-        expect.objectContaining({ type: 'codex', cwd: '/home/user/project-a' })
+        expect.objectContaining({ type: 'codex', cwd: '/home/user/project-a' }),
+        expect.anything(),
       )
     })
 
@@ -515,7 +536,8 @@ describe('start', () => {
       start()
 
       expect(managerAddSessionMock).toHaveBeenCalledWith(
-        expect.objectContaining({ type: 'codex', args: ['resume', '--last'] })
+        expect.objectContaining({ type: 'codex', args: ['resume', '--last'] }),
+        expect.anything(),
       )
     })
   })
