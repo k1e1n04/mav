@@ -41,9 +41,25 @@ export function buildHookArgs(
 }
 
 function buildClaudeCodeHook(baseArgs: string[], hookCommand: string): HookInjectionResult {
-  const settings = {
+  const claudeSettingsPath = join(homedir(), '.claude', 'settings.json')
+  let existing: Record<string, unknown> = {}
+  if (existsSync(claudeSettingsPath)) {
+    try {
+      existing = JSON.parse(readFileSync(claudeSettingsPath, 'utf-8')) as Record<string, unknown>
+    } catch {
+      // Unreadable/invalid JSON — start from empty
+    }
+  }
+
+  const existingHooks = (existing.hooks ?? {}) as Record<string, unknown[]>
+  const existingPostToolUse = (existingHooks.PostToolUse ?? []) as unknown[]
+
+  const merged = {
+    ...existing,
     hooks: {
+      ...existingHooks,
       PostToolUse: [
+        ...existingPostToolUse,
         {
           matcher: '',
           hooks: [{ type: 'command', command: hookCommand }],
@@ -51,8 +67,9 @@ function buildClaudeCodeHook(baseArgs: string[], hookCommand: string): HookInjec
       ],
     },
   }
+
   return {
-    args: [...baseArgs, '--settings', JSON.stringify(settings)],
+    args: [...baseArgs, '--settings', JSON.stringify(merged)],
     hookFiles: [],
   }
 }

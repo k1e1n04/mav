@@ -1,19 +1,87 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { existsSync, readFileSync, writeFileSync, mkdirSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
+import { tmpdir } from 'node:os'
+import { randomUUID } from 'node:crypto'
 
 const { buildHookArgs, cleanupHookFiles } = await import('../src/hook-injector.js')
 
 describe('hook-injector: claude-code', () => {
-  it('PostToolUse hook を --settings 引数に追加する', () => {
+  let tempHome: string
+  let origHome: string | undefined
+
+  beforeEach(() => {
+    tempHome = join(tmpdir(), `mav-test-${randomUUID()}`)
+    mkdirSync(join(tempHome, '.claude'), { recursive: true })
+    origHome = process.env.HOME
+    process.env.HOME = tempHome
+  })
+
+  afterEach(() => {
+    process.env.HOME = origHome
+    rmSync(tempHome, { recursive: true, force: true })
+  })
+
+  it('settings.json がない場合は PostToolUse のみ追加する', () => {
     const { args } = buildHookArgs('claude-code', [], 'mav report cwd "$(pwd)"')
     const settingsIdx = args.indexOf('--settings')
     expect(settingsIdx).toBeGreaterThan(-1)
     const json = JSON.parse(args[settingsIdx + 1]!)
+    expect(json.hooks.PostToolUse).toHaveLength(1)
     expect(json.hooks.PostToolUse[0].hooks[0].command).toBe('mav report cwd "$(pwd)"')
   })
 
-  it('既存のargs を保持する', () => {
+  it('既存の settings.json の設定を保持しつつ PostToolUse を追加する', () => {
+    const settingsPath = join(tempHome, '.claude', 'settings.json')
+    writeFileSync(settingsPath, JSON.stringify({
+      model: 'sonnet',
+      language: 'ja',
+      permissions: { allow: ['bash'] },
+      hooks: {
+        Stop: [{ matcher: '', hooks: [{ type: 'command', command: 'echo done' }] }],
+      },
+    }))
+
+    const { args } = buildHookArgs('claude-code', [], 'mav report cwd "$(pwd)"')
+    const settingsIdx = args.indexOf('--settings')
+    const json = JSON.parse(args[settingsIdx + 1]!)
+
+    expect(json.model).toBe('sonnet')
+    expect(json.language).toBe('ja')
+    expect(json.permissions.allow).toContain('bash')
+    expect(json.hooks.Stop).toHaveLength(1)
+    const mavHook = (json.hooks.PostToolUse as Array<{ hooks: Array<{ command: string }> }>)
+      .find(h => h.hooks[0]?.command === 'mav report cwd "$(pwd)"')
+    expect(mavHook).toBeDefined()
+  })
+
+  it('既存の PostToolUse フックを保持しつつ mav フックを末尾に追加する', () => {
+    const settingsPath = join(tempHome, '.claude', 'settings.json')
+    writeFileSync(settingsPath, JSON.stringify({
+      hooks: {
+        PostToolUse: [{ matcher: 'Bash', hooks: [{ type: 'command', command: 'echo existing' }] }],
+      },
+    }))
+
+    const { args } = buildHookArgs('claude-code', [], 'mav report cwd "$(pwd)"')
+    const json = JSON.parse(args[args.indexOf('--settings') + 1]!)
+
+    expect(json.hooks.PostToolUse).toHaveLength(2)
+    expect(json.hooks.PostToolUse[0].hooks[0].command).toBe('echo existing')
+    expect(json.hooks.PostToolUse[1].hooks[0].command).toBe('mav report cwd "$(pwd)"')
+  })
+
+  it('壊れた settings.json は無視して PostToolUse のみ追加する', () => {
+    const settingsPath = join(tempHome, '.claude', 'settings.json')
+    writeFileSync(settingsPath, 'not valid json {{{')
+
+    const { args } = buildHookArgs('claude-code', [], 'mav report cwd "$(pwd)"')
+    const json = JSON.parse(args[args.indexOf('--settings') + 1]!)
+    expect(json.hooks.PostToolUse).toHaveLength(1)
+    expect(json.hooks.PostToolUse[0].hooks[0].command).toBe('mav report cwd "$(pwd)"')
+  })
+
+  it('既存のargsを保持する', () => {
     const { args } = buildHookArgs('claude-code', ['--model', 'opus'], 'mav report cwd "$(pwd)"')
     expect(args).toContain('--model')
     expect(args).toContain('opus')
