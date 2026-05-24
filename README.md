@@ -129,6 +129,10 @@ mav tracks each agent's working directory. When an agent changes directory (e.g.
 
 > **Cursor** and unlisted agents use process polling to track the working directory.
 > Directory changes made in child processes (e.g., git worktrees) may not be detected.
+>
+> **Codex / Copilot / Gemini note:** even when `mav` tracks a session's latest `cwd`, these agents may not keep a persistent shell `cd` across turns in this environment. In practice, they can follow the worktree by running each command with that directory as its `workdir`, rather than by changing their own long-lived terminal state.
+>
+> If you want shell-like directory changes to feel most natural inside the agent session itself, `claude-code` is currently the safest choice.
 
 ## Keybindings
 
