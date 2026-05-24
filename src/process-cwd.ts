@@ -75,7 +75,10 @@ function findClaudeChildDarwin(shellPid: number): number | null {
         if (spaceIdx !== -1) {
           const args = line.slice(spaceIdx).trim()
           const binary = args.split(' ')[0] ?? ''
-          if ((binary === 'node' || binary.endsWith('/node')) && args.includes('claude')) {
+          if (
+            ((binary === 'node' || binary.endsWith('/node')) && args.includes('claude')) ||
+            binary === 'claude' || binary.endsWith('/claude')
+          ) {
             return parseInt(item.pidStr, 10)
           }
         }
@@ -122,7 +125,10 @@ function findClaudeChildLinux(shellPid: number): number | null {
       const cmdline = readFileSync(`/proc/${item.pidStr}/cmdline`, 'utf8')
       const parts = cmdline.split('\0').filter(Boolean)
       const binary = parts[0] ?? ''
-      if ((binary === 'node' || binary.endsWith('/node')) && cmdline.includes('claude')) {
+      if (
+        ((binary === 'node' || binary.endsWith('/node')) && cmdline.includes('claude')) ||
+        binary === 'claude' || binary.endsWith('/claude')
+      ) {
         return parseInt(item.pidStr, 10)
       }
     } catch {

@@ -68,6 +68,33 @@ describe('getClaudeChildPid', () => {
     expect(getClaudeChildPid(1234, 'darwin')).toBe(9999)
   })
 
+  it('darwin: claude バイナリ直接の子プロセス（claude-launcher 経由）の PID を返す', async () => {
+    // claude-launcher が PTY プロセスで、その子が claude バイナリとして起動される場合
+    const execFileSync = vi.fn((cmd: string, args: string[]) => {
+      if (cmd === 'pgrep') return '31099\n'
+      const pid = args[args.indexOf('-p') + 1]
+      if (pid === '31099') return '   31099 claude --settings /path/to/settings.json\n'
+      return ''
+    })
+    vi.doMock('node:fs', () => ({ readlinkSync: vi.fn(), readFileSync: vi.fn() }))
+    vi.doMock('node:child_process', () => ({ execFileSync }))
+    const { getClaudeChildPid } = await import('../src/process-cwd.js')
+    expect(getClaudeChildPid(28727, 'darwin')).toBe(31099)
+  })
+
+  it('darwin: フルパス付き claude バイナリも認識する', async () => {
+    const execFileSync = vi.fn((cmd: string, args: string[]) => {
+      if (cmd === 'pgrep') return '9999\n'
+      const pid = args[args.indexOf('-p') + 1]
+      if (pid === '9999') return '   9999 /usr/local/bin/claude --settings /path/to/settings.json\n'
+      return ''
+    })
+    vi.doMock('node:fs', () => ({ readlinkSync: vi.fn(), readFileSync: vi.fn() }))
+    vi.doMock('node:child_process', () => ({ execFileSync }))
+    const { getClaudeChildPid } = await import('../src/process-cwd.js')
+    expect(getClaudeChildPid(1234, 'darwin')).toBe(9999)
+  })
+
   it('darwin: 深さ上限（5）を超えたプロセスは探索しない', async () => {
     // 深さ6の chain: 1234 → 2 → 3 → 4 → 5 → 6 → 9999(claude)
     const execFileSync = vi.fn((cmd: string, args: string[]) => {
@@ -134,6 +161,30 @@ describe('getClaudeChildPid', () => {
       if (path === '/proc/5678/cmdline') return 'claude-launcher\0'
       if (path === '/proc/5678/task/5678/children') return '9999 '
       if (path === '/proc/9999/cmdline') return 'node\0/usr/local/bin/claude\0'
+      return ''
+    })
+    vi.doMock('node:fs', () => ({ readlinkSync: vi.fn(), readFileSync }))
+    vi.doMock('node:child_process', () => ({ execFileSync: vi.fn() }))
+    const { getClaudeChildPid } = await import('../src/process-cwd.js')
+    expect(getClaudeChildPid(1234, 'linux')).toBe(9999)
+  })
+
+  it('linux: claude バイナリ直接の子プロセス（claude-launcher 経由）の PID を返す', async () => {
+    const readFileSync = vi.fn((path: string) => {
+      if (path === '/proc/28727/task/28727/children') return '31099 '
+      if (path === '/proc/31099/cmdline') return 'claude\0--settings\0/path/to/settings.json\0'
+      return ''
+    })
+    vi.doMock('node:fs', () => ({ readlinkSync: vi.fn(), readFileSync }))
+    vi.doMock('node:child_process', () => ({ execFileSync: vi.fn() }))
+    const { getClaudeChildPid } = await import('../src/process-cwd.js')
+    expect(getClaudeChildPid(28727, 'linux')).toBe(31099)
+  })
+
+  it('linux: フルパス付き claude バイナリも認識する', async () => {
+    const readFileSync = vi.fn((path: string) => {
+      if (path === '/proc/1234/task/1234/children') return '9999 '
+      if (path === '/proc/9999/cmdline') return '/usr/local/bin/claude\0--settings\0/path/to/settings.json\0'
       return ''
     })
     vi.doMock('node:fs', () => ({ readlinkSync: vi.fn(), readFileSync }))
