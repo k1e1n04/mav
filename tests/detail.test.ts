@@ -169,6 +169,34 @@ describe('DetailUI', () => {
     expect(outputWrite).toHaveBeenCalledWith('\x1b[=0u')
   })
 
+  it('terminalのkeyboard enhancement flags応答はPTYへ送らない', () => {
+    ui.attach(session as never)
+
+    input.emit('data', '\x1b[?7u')
+
+    expect(session.write).not.toHaveBeenCalled()
+  })
+
+  it('WarpのAPC応答はPTYへ送らない', () => {
+    ui.attach(session as never)
+
+    input.emit('data', '\x1b_Warp;tab-name=My Warp Tab\r\n\x1b\\')
+
+    expect(session.write).not.toHaveBeenCalled()
+  })
+
+  it('分割されたWarpのAPC応答を捨てたあとにユーザー入力だけをPTYへ送る', () => {
+    ui.attach(session as never)
+
+    input.emit('data', '\x1b_Warp;tab-name=')
+    input.emit('data', 'My Warp Tab\r\n')
+    input.emit('data', '\x1b\\')
+    input.emit('data', 'hello')
+
+    expect(session.write).toHaveBeenCalledTimes(1)
+    expect(session.write).toHaveBeenCalledWith('hello')
+  })
+
   it('前回検出したkeyboard enhancement flagsをreattach時に復元する', () => {
     ui.attach(session as never)
     input.emit('data', '\x1b[?7u')

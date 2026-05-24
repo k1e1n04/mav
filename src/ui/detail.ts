@@ -26,6 +26,7 @@ export class DetailUI {
   private pendingInput = ''
   private pendingInputTimer: ReturnType<typeof setTimeout> | null = null
   private keyboardEnhancementFlags: string | null = null
+  private pendingTerminalResponse = ''
 
   constructor(terminal: TerminalUI, onExitDetail: () => void) {
     this.terminal = terminal
@@ -81,6 +82,40 @@ export class DetailUI {
     this.clearPendingInputTimer()
   }
 
+  private sanitizeTerminalResponses(input: string): string {
+    const combined = this.pendingTerminalResponse + input
+    const trailingPrefix = DetailUI.extractTrailingTerminalResponsePrefix(combined)
+    const processable = trailingPrefix.length > 0
+      ? combined.slice(0, -trailingPrefix.length)
+      : combined
+    this.pendingTerminalResponse = trailingPrefix
+
+    return processable
+      .replace(/\x1b[P_^X][\s\S]*?(?:\x07|\x1b\\)/g, '')
+      .replace(/\x1b\][\s\S]*?(?:\x07|\x1b\\)/g, '')
+      .replace(/\x1b\[\?\d+(?:;\d+)*u/g, '')
+  }
+
+  private static extractTrailingTerminalResponsePrefix(input: string): string {
+    const csiMatch = input.match(/\x1b\[\?[0-9;]*$/)
+    if (csiMatch) {
+      return csiMatch[0]
+    }
+
+    const escapeIndex = input.lastIndexOf('\x1b')
+    if (escapeIndex === -1) {
+      return ''
+    }
+
+    const candidate = input.slice(escapeIndex)
+    if (!/^\x1b[\]P_^X]/.test(candidate)) {
+      return ''
+    }
+
+    const hasTerminator = /\x07|\x1b\\/.test(candidate)
+    return hasTerminator ? '' : candidate
+  }
+
   attach(session: AgentSession): void {
     this.detach()
     this.currentSession = session
@@ -112,11 +147,15 @@ export class DetailUI {
       if (!str) return
       this.debugLogInput(str)
       this.rememberKeyboardEnhancementFlags(str)
-      if (this.isExitShortcut(str)) {
+      const sanitized = this.sanitizeTerminalResponses(str)
+      if (!sanitized) {
+        return
+      }
+      if (this.isExitShortcut(sanitized)) {
         this.onExitDetail()
         return
       }
-      this.pendingInput += str
+      this.pendingInput += sanitized
 
       if (this.isExitShortcut(this.pendingInput)) {
         this.clearPendingInputTimer()
@@ -150,6 +189,7 @@ export class DetailUI {
     }
     this.clearPendingInputTimer()
     this.pendingInput = ''
+    this.pendingTerminalResponse = ''
     this.currentSession = null
   }
 
