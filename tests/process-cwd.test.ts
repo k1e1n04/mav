@@ -48,6 +48,50 @@ describe('getClaudeChildPid', () => {
     expect(getClaudeChildPid(1234, 'darwin')).toBeNull()
   })
 
+  it('darwin: wrapper → claude の孫プロセスを BFS で見つける', async () => {
+    const execFileSync = vi.fn((cmd: string, args: string[]) => {
+      if (cmd === 'pgrep') {
+        const parent = args[args.indexOf('-P') + 1]
+        if (parent === '1234') return '5678\n'
+        if (parent === '5678') return '9999\n'
+        throw Object.assign(new Error('no children'), { code: 1 })
+      }
+      // ps
+      const pid = args[args.indexOf('-p') + 1]
+      if (pid === '5678') return '   5678 claude-launcher\n'
+      if (pid === '9999') return '   9999 node /usr/local/bin/claude\n'
+      return ''
+    })
+    vi.doMock('node:fs', () => ({ readlinkSync: vi.fn(), readFileSync: vi.fn() }))
+    vi.doMock('node:child_process', () => ({ execFileSync }))
+    const { getClaudeChildPid } = await import('../src/process-cwd.js')
+    expect(getClaudeChildPid(1234, 'darwin')).toBe(9999)
+  })
+
+  it('darwin: 深さ上限（5）を超えたプロセスは探索しない', async () => {
+    // 深さ6の chain: 1234 → 2 → 3 → 4 → 5 → 6 → 9999(claude)
+    const execFileSync = vi.fn((cmd: string, args: string[]) => {
+      if (cmd === 'pgrep') {
+        const parent = args[args.indexOf('-P') + 1]
+        const chain: Record<string, string> = {
+          '1234': '2\n', '2': '3\n', '3': '4\n', '4': '5\n', '5': '6\n', '6': '9999\n',
+        }
+        const result = chain[parent]
+        if (result) return result
+        throw Object.assign(new Error('no children'), { code: 1 })
+      }
+      // ps: 全部 bash として返す（9999 だけ claude）
+      const pid = args[args.indexOf('-p') + 1]
+      if (pid === '9999') return '   9999 node /usr/local/bin/claude\n'
+      return `   ${pid} bash\n`
+    })
+    vi.doMock('node:fs', () => ({ readlinkSync: vi.fn(), readFileSync: vi.fn() }))
+    vi.doMock('node:child_process', () => ({ execFileSync }))
+    const { getClaudeChildPid } = await import('../src/process-cwd.js')
+    // 深さ6は上限を超えるので見つからない
+    expect(getClaudeChildPid(1234, 'darwin')).toBeNull()
+  })
+
   it('linux: node+claude な直接の子プロセスの PID を返す', async () => {
     const readFileSync = vi.fn((path: string) => {
       if (path === '/proc/1234/task/1234/children') return '9999 2000 '
@@ -81,6 +125,44 @@ describe('getClaudeChildPid', () => {
     vi.doMock('node:fs', () => ({ readlinkSync: vi.fn(), readFileSync }))
     vi.doMock('node:child_process', () => ({ execFileSync: vi.fn() }))
     const { getClaudeChildPid } = await import('../src/process-cwd.js')
+    expect(getClaudeChildPid(1234, 'linux')).toBeNull()
+  })
+
+  it('linux: wrapper → claude の孫プロセスを BFS で見つける', async () => {
+    const readFileSync = vi.fn((path: string) => {
+      if (path === '/proc/1234/task/1234/children') return '5678 '
+      if (path === '/proc/5678/cmdline') return 'claude-launcher\0'
+      if (path === '/proc/5678/task/5678/children') return '9999 '
+      if (path === '/proc/9999/cmdline') return 'node\0/usr/local/bin/claude\0'
+      return ''
+    })
+    vi.doMock('node:fs', () => ({ readlinkSync: vi.fn(), readFileSync }))
+    vi.doMock('node:child_process', () => ({ execFileSync: vi.fn() }))
+    const { getClaudeChildPid } = await import('../src/process-cwd.js')
+    expect(getClaudeChildPid(1234, 'linux')).toBe(9999)
+  })
+
+  it('linux: 深さ上限（5）を超えたプロセスは探索しない', async () => {
+    // chain: 1234 → 2 → 3 → 4 → 5 → 6 → 9999(claude)
+    const readFileSync = vi.fn((path: string) => {
+      const childrenMatch = path.match(/^\/proc\/(\d+)\/task\/\1\/children$/)
+      if (childrenMatch) {
+        const chain: Record<string, string> = {
+          '1234': '2 ', '2': '3 ', '3': '4 ', '4': '5 ', '5': '6 ', '6': '9999 ',
+        }
+        return chain[childrenMatch[1]] ?? ''
+      }
+      const cmdlineMatch = path.match(/^\/proc\/(\d+)\/cmdline$/)
+      if (cmdlineMatch) {
+        if (cmdlineMatch[1] === '9999') return 'node\0/usr/local/bin/claude\0'
+        return `bash\0`
+      }
+      return ''
+    })
+    vi.doMock('node:fs', () => ({ readlinkSync: vi.fn(), readFileSync }))
+    vi.doMock('node:child_process', () => ({ execFileSync: vi.fn() }))
+    const { getClaudeChildPid } = await import('../src/process-cwd.js')
+    // 深さ6は上限を超えるので見つからない
     expect(getClaudeChildPid(1234, 'linux')).toBeNull()
   })
 })
