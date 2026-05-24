@@ -31,6 +31,8 @@ export function buildHookArgs(
       return buildClaudeCodeHook(baseArgs, hookCommand)
     case 'gemini-cli':
       return buildGeminiHook(baseArgs, hookCommand, options.cwd)
+    case 'copilot':
+      return buildCopilotHook(baseArgs, hookCommand, options.cwd)
     case 'codex':
       return buildCodexHook(baseArgs, hookCommand)
     default:
@@ -113,6 +115,35 @@ function buildCodexHook(baseArgs: string[], hookCommand: string): HookInjectionR
   return {
     args: [...baseArgs, '--profile-v2', profileName],
     hookFiles: [tomlPath],
+  }
+}
+
+function buildCopilotHook(
+  baseArgs: string[],
+  hookCommand: string,
+  cwd?: string,
+): HookInjectionResult {
+  const projectDir = cwd ?? process.cwd()
+  const hooksDir = join(projectDir, '.github', 'hooks')
+  const hookPath = join(hooksDir, `mav-${randomUUID()}.json`)
+  const hookConfig = {
+    version: 1,
+    hooks: {
+      postToolUse: [
+        {
+          type: 'command',
+          command: hookCommand,
+        },
+      ],
+    },
+  }
+
+  mkdirSync(hooksDir, { recursive: true })
+  writeFileSync(hookPath, JSON.stringify(hookConfig, null, 2))
+
+  return {
+    args: baseArgs,
+    hookFiles: [hookPath],
   }
 }
 

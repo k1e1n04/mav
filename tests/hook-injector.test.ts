@@ -90,10 +90,21 @@ describe('hook-injector: codex', () => {
 })
 
 describe('hook-injector: copilot', () => {
-  it('argsを変更しない', () => {
+  it('argsを変更せず repo-level hook file を生成する', () => {
+    const cwd = '/tmp/copilot-project'
     const original = ['--allow-all']
-    const { args } = buildHookArgs('copilot', original, 'mav report cwd "$(pwd)"')
+    const { args, hookFiles } = buildHookArgs('copilot', original, 'mav report cwd "$(pwd)"', { cwd })
+
     expect(args).toEqual(original)
+    expect(hookFiles).toHaveLength(1)
+    expect(hookFiles[0]).toMatch(/\/\.github\/hooks\/mav-.*\.json$/)
+    expect(existsSync(hookFiles[0]!)).toBe(true)
+
+    const content = JSON.parse(readFileSync(hookFiles[0]!, 'utf-8'))
+    expect(content.version).toBe(1)
+    expect(content.hooks.postToolUse[0].command).toBe('mav report cwd "$(pwd)"')
+
+    cleanupHookFiles(hookFiles)
   })
 })
 

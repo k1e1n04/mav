@@ -123,10 +123,11 @@ mav tracks each agent's working directory. When an agent changes directory (e.g.
 | `claude-code` | IPC + PostToolUse hook | ✅ Auto-injected via `--settings` |
 | `gemini-cli` | IPC + AfterTool hook | ✅ Auto-injected via `.gemini/settings.local.json` |
 | `codex` | IPC + PostToolUse hook | ✅ Auto-injected via `--profile-v2` |
-| `copilot` | lsof polling only | ❌ Not supported (no hook API) |
+| `copilot` | IPC + PostToolUse hook | ✅ Auto-injected via `.github/hooks/*.json` |
+| `cursor` | lsof polling only | ❌ Not supported |
 | Other | lsof polling only | ❌ Not supported |
 
-> **Copilot** and unlisted agents use process polling to track the working directory.
+> **Cursor** and unlisted agents use process polling to track the working directory.
 > Directory changes made in child processes (e.g., git worktrees) may not be detected.
 
 ## Keybindings
