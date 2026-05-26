@@ -38,8 +38,8 @@ describe('AgentSession', () => {
   beforeEach(() => {
     vi.useFakeTimers()
     vi.clearAllMocks()
-    getProcessCwdMock.mockReturnValue(null)
-    getClaudeChildPidMock.mockReturnValue(null)
+    getProcessCwdMock.mockResolvedValue(null)
+    getClaudeChildPidMock.mockResolvedValue(null)
     getMockPty().onData.mockImplementation((cb: (data: string) => void) => { onDataCb = cb })
     getMockPty().onExit.mockImplementation((cb: (e: { exitCode: number }) => void) => { onExitCb = cb })
     session = new AgentSession({ type: 'claude-code', cmd: 'claude', args: [] }, 80, 24)
@@ -240,23 +240,23 @@ describe('AgentSession', () => {
     expect(handler).not.toHaveBeenCalled()
   })
 
-  it('child process の live cwd を poll して更新する', () => {
+  it('child process の live cwd を poll して更新する', async () => {
     const handler = vi.fn()
     session.on('cwd', handler)
-    getProcessCwdMock.mockReturnValue('/tmp/worktrees/live-a')
+    getProcessCwdMock.mockResolvedValue('/tmp/worktrees/live-a')
 
-    vi.advanceTimersByTime(1000)
+    await vi.advanceTimersByTimeAsync(1000)
 
     expect(session.cwd).toBe('/tmp/worktrees/live-a')
     expect(handler).toHaveBeenCalledWith('/tmp/worktrees/live-a')
   })
 
-  it('poll した cwd が変わらなければ cwd イベントを発火しない', () => {
+  it('poll した cwd が変わらなければ cwd イベントを発火しない', async () => {
     const handler = vi.fn()
     session.on('cwd', handler)
-    getProcessCwdMock.mockReturnValue(session.cwd)
+    getProcessCwdMock.mockResolvedValue(session.cwd)
 
-    vi.advanceTimersByTime(1000)
+    await vi.advanceTimersByTimeAsync(1000)
 
     expect(handler).not.toHaveBeenCalled()
   })
@@ -325,8 +325,8 @@ describe('AgentSession — claude-code child PID polling', () => {
   beforeEach(() => {
     vi.useFakeTimers()
     vi.clearAllMocks()
-    getProcessCwdMock.mockReturnValue(null)
-    getClaudeChildPidMock.mockReturnValue(null)
+    getProcessCwdMock.mockResolvedValue(null)
+    getClaudeChildPidMock.mockResolvedValue(null)
     getMockPty().onData.mockImplementation((cb: (data: string) => void) => { void cb })
     getMockPty().onExit.mockImplementation((cb: (e: { exitCode: number }) => void) => { void cb })
   })
@@ -335,57 +335,59 @@ describe('AgentSession — claude-code child PID polling', () => {
     vi.useRealTimers()
   })
 
-  it('child PID が見つかればそちらの CWD を polling する', () => {
-    getClaudeChildPidMock.mockReturnValue(9999)
-    getProcessCwdMock.mockImplementation((pid: number) => pid === 9999 ? '/worktrees/feat' : null)
+  it('child PID が見つかればそちらの CWD を polling する', async () => {
+    getClaudeChildPidMock.mockResolvedValue(9999)
+    getProcessCwdMock.mockImplementation((pid: number) => pid === 9999 ? Promise.resolve('/worktrees/feat') : Promise.resolve(null))
     const s = new AgentSession({ type: 'claude-code', cmd: 'claude', args: [] }, 80, 24)
-    vi.advanceTimersByTime(1000)
+    await vi.advanceTimersByTimeAsync(1000)
     expect(s.cwd).toBe('/worktrees/feat')
     expect(getProcessCwdMock).toHaveBeenCalledWith(9999)
     expect(getClaudeChildPidMock).toHaveBeenCalledWith(1234)
   })
 
-  it('child PID が null のときは shell PID にフォールバックする', () => {
-    getProcessCwdMock.mockImplementation((pid: number) => pid === 1234 ? '/shell/cwd' : null)
+  it('child PID が null のときは shell PID にフォールバックする', async () => {
+    getProcessCwdMock.mockImplementation((pid: number) => pid === 1234 ? Promise.resolve('/shell/cwd') : Promise.resolve(null))
     const s = new AgentSession({ type: 'claude-code', cmd: 'claude', args: [] }, 80, 24)
-    vi.advanceTimersByTime(1000)
+    await vi.advanceTimersByTimeAsync(1000)
     expect(s.cwd).toBe('/shell/cwd')
     expect(getProcessCwdMock).toHaveBeenCalledWith(1234)
   })
 
-  it('child PID 未発見の間は毎 tick 再探索する', () => {
+  it('child PID 未発見の間は毎 tick 再探索する', async () => {
     getClaudeChildPidMock
-      .mockReturnValueOnce(null)
-      .mockReturnValueOnce(9999)
-    getProcessCwdMock.mockImplementation((pid: number) => pid === 9999 ? '/found' : null)
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(9999)
+    getProcessCwdMock.mockImplementation((pid: number) => pid === 9999 ? Promise.resolve('/found') : Promise.resolve(null))
     const s = new AgentSession({ type: 'claude-code', cmd: 'claude', args: [] }, 80, 24)
-    vi.advanceTimersByTime(2000)
+    await vi.advanceTimersByTimeAsync(2000)
     expect(getClaudeChildPidMock).toHaveBeenCalledTimes(2)
     expect(s.cwd).toBe('/found')
   })
 
-  it('child PID 発見後はキャッシュして再探索しない', () => {
-    getClaudeChildPidMock.mockReturnValue(9999)
-    getProcessCwdMock.mockReturnValue('/some/path')
+  it('child PID 発見後はキャッシュして再探索しない', async () => {
+    getClaudeChildPidMock.mockResolvedValue(9999)
+    getProcessCwdMock.mockResolvedValue('/some/path')
     new AgentSession({ type: 'claude-code', cmd: 'claude', args: [] }, 80, 24)
-    vi.advanceTimersByTime(3000)
+    await vi.advanceTimersByTimeAsync(3000)
     expect(getClaudeChildPidMock).toHaveBeenCalledTimes(1)
   })
 
-  it('getProcessCwd が null を返したら PID をリセットして再探索する', () => {
-    getClaudeChildPidMock.mockReturnValue(9999)
+  it('getProcessCwd が null を返したら PID をリセットして再探索する', async () => {
+    getClaudeChildPidMock.mockResolvedValue(9999)
     getProcessCwdMock
-      .mockReturnValueOnce('/first/path')
-      .mockReturnValueOnce(null)
+      .mockResolvedValueOnce('/first/path')
+      .mockResolvedValueOnce(null)
     new AgentSession({ type: 'claude-code', cmd: 'claude', args: [] }, 80, 24)
-    vi.advanceTimersByTime(2000)
-    vi.advanceTimersByTime(1000)
+    // t=1000: poll#1 → getClaudeChildPid(呼び出し#1) → getProcessCwd → '/first/path'
+    // t=2000: poll#2 → claudeChildPid キャッシュ → getProcessCwd → null → PIDリセット
+    // t=3000: poll#3 → claudeChildPid=null → getClaudeChildPid(呼び出し#2)
+    await vi.advanceTimersByTimeAsync(3000)
     expect(getClaudeChildPidMock).toHaveBeenCalledTimes(2)
   })
 
-  it('claude-code 以外は getClaudeChildPid を呼ばない', () => {
+  it('claude-code 以外は getClaudeChildPid を呼ばない', async () => {
     new AgentSession({ type: 'codex', cmd: 'codex', args: [] }, 80, 24)
-    vi.advanceTimersByTime(1000)
+    await vi.advanceTimersByTimeAsync(1000)
     expect(getClaudeChildPidMock).not.toHaveBeenCalled()
   })
 })
@@ -419,8 +421,8 @@ describe('AgentSession — IPC env injection', () => {
   beforeEach(() => {
     vi.useFakeTimers()
     vi.clearAllMocks()
-    getProcessCwdMock.mockReturnValue(null)
-    getClaudeChildPidMock.mockReturnValue(null)
+    getProcessCwdMock.mockResolvedValue(null)
+    getClaudeChildPidMock.mockResolvedValue(null)
     getMockPty().onData.mockImplementation((cb: (data: string) => void) => { onDataCb = cb })
     getMockPty().onExit.mockImplementation((cb: (e: { exitCode: number }) => void) => { onExitCb = cb })
   })

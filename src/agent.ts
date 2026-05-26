@@ -33,7 +33,7 @@ export class AgentSession extends EventEmitter {
   private ptyProcess: pty.IPty | undefined
   private exited = false
   private idleTimer: ReturnType<typeof setTimeout> | null = null
-  private cwdPollTimer: ReturnType<typeof setInterval> | null = null
+  private cwdPollTimer: ReturnType<typeof setTimeout> | null = null
   private claudeChildPid: number | null = null
   private displayNameLocked = false
   private initialInputBuffer = ''
@@ -175,30 +175,39 @@ export class AgentSession extends EventEmitter {
   }
 
   private startCwdPolling(): void {
-    if (this.cwdPollTimer || !this.ptyProcess) {
+    if (this.cwdPollTimer !== null || !this.ptyProcess) {
       return
     }
 
-    this.cwdPollTimer = setInterval(() => {
-      if (this.exited || !this.ptyProcess) {
-        return
-      }
+    this.scheduleCwdPoll()
+  }
 
-      if (this.type === 'claude-code') {
-        if (this.claudeChildPid === null) {
-          this.claudeChildPid = getClaudeChildPid(this.ptyProcess.pid)
-        }
-        const targetPid = this.claudeChildPid ?? this.ptyProcess.pid
-        const cwd = getProcessCwd(targetPid)
-        if (cwd === null && this.claudeChildPid !== null) {
-          this.claudeChildPid = null
-        } else {
-          this.updateCwd(cwd)
-        }
-      } else {
-        this.updateCwd(getProcessCwd(this.ptyProcess.pid))
+  private scheduleCwdPoll(): void {
+    this.cwdPollTimer = setTimeout(() => { void this.runCwdPoll() }, AgentSession.CWD_POLL_INTERVAL_MS)
+  }
+
+  private async runCwdPoll(): Promise<void> {
+    this.cwdPollTimer = null
+    if (this.exited || !this.ptyProcess) return
+
+    if (this.type === 'claude-code') {
+      if (this.claudeChildPid === null) {
+        this.claudeChildPid = await getClaudeChildPid(this.ptyProcess.pid)
       }
-    }, AgentSession.CWD_POLL_INTERVAL_MS)
+      const targetPid = this.claudeChildPid ?? this.ptyProcess.pid
+      const cwd = await getProcessCwd(targetPid)
+      if (cwd === null && this.claudeChildPid !== null) {
+        this.claudeChildPid = null
+      } else {
+        this.updateCwd(cwd)
+      }
+    } else {
+      this.updateCwd(await getProcessCwd(this.ptyProcess.pid))
+    }
+
+    if (!this.exited) {
+      this.scheduleCwdPoll()
+    }
   }
 
   private clearCwdPollTimer(): void {
@@ -206,7 +215,7 @@ export class AgentSession extends EventEmitter {
       return
     }
 
-    clearInterval(this.cwdPollTimer)
+    clearTimeout(this.cwdPollTimer)
     this.cwdPollTimer = null
   }
 

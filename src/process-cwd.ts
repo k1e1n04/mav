@@ -1,22 +1,27 @@
-import { execFileSync } from 'node:child_process'
-import { readlinkSync, readFileSync } from 'node:fs'
+import { execFile } from 'node:child_process'
+import { readlink, readFile } from 'node:fs/promises'
 
-export function getProcessCwd(pid: number, platform: NodeJS.Platform = process.platform): string | null {
+function runCommand(cmd: string, args: string[]): Promise<string> {
+  return new Promise((resolve, reject) => {
+    execFile(cmd, args, { encoding: 'utf8' }, (err, stdout) => {
+      if (err) reject(err)
+      else resolve(stdout as string)
+    })
+  })
+}
+
+export async function getProcessCwd(pid: number, platform: NodeJS.Platform = process.platform): Promise<string | null> {
   if (!Number.isInteger(pid) || pid <= 0) {
     return null
   }
 
   try {
     if (platform === 'linux') {
-      return readlinkSync(`/proc/${pid}/cwd`)
+      return await readlink(`/proc/${pid}/cwd`)
     }
 
     if (platform === 'darwin') {
-      const output = execFileSync(
-        'lsof',
-        ['-a', '-d', 'cwd', '-p', String(pid), '-Fn'],
-        { encoding: 'utf8' },
-      )
+      const output = await runCommand('lsof', ['-a', '-d', 'cwd', '-p', String(pid), '-Fn'])
       const cwdLine = output
         .split('\n')
         .find((line) => line.startsWith('n/') || line === 'n/')
@@ -32,10 +37,10 @@ export function getProcessCwd(pid: number, platform: NodeJS.Platform = process.p
 
 const CLAUDE_CHILD_MAX_DEPTH = 5
 
-export function getClaudeChildPid(
+export async function getClaudeChildPid(
   shellPid: number,
   platform: NodeJS.Platform = process.platform,
-): number | null {
+): Promise<number | null> {
   if (!Number.isInteger(shellPid) || shellPid <= 0) {
     return null
   }
@@ -51,10 +56,11 @@ export function getClaudeChildPid(
   return null
 }
 
-function findClaudeChildDarwin(shellPid: number): number | null {
+async function findClaudeChildDarwin(shellPid: number): Promise<number | null> {
   let initialChildren: string[]
   try {
-    initialChildren = execFileSync('pgrep', ['-P', String(shellPid)], { encoding: 'utf8' })
+    const output = await runCommand('pgrep', ['-P', String(shellPid)])
+    initialChildren = output
       .split('\n')
       .map((s) => s.trim())
       .filter(Boolean)
@@ -69,11 +75,12 @@ function findClaudeChildDarwin(shellPid: number): number | null {
     if (item.depth >= CLAUDE_CHILD_MAX_DEPTH) continue
 
     try {
-      const line = execFileSync('ps', ['-o', 'pid=,args=', '-p', item.pidStr], { encoding: 'utf8' }).trim()
-      if (line) {
-        const spaceIdx = line.search(/\s/)
+      const line = await runCommand('ps', ['-o', 'pid=,args=', '-p', item.pidStr])
+      const trimmed = line.trim()
+      if (trimmed) {
+        const spaceIdx = trimmed.search(/\s/)
         if (spaceIdx !== -1) {
-          const args = line.slice(spaceIdx).trim()
+          const args = trimmed.slice(spaceIdx).trim()
           const binary = args.split(' ')[0] ?? ''
           if (
             ((binary === 'node' || binary.endsWith('/node')) && args.includes('claude')) ||
@@ -89,7 +96,8 @@ function findClaudeChildDarwin(shellPid: number): number | null {
 
     // Not claude — enqueue children for next level
     try {
-      const children = execFileSync('pgrep', ['-P', item.pidStr], { encoding: 'utf8' })
+      const childOutput = await runCommand('pgrep', ['-P', item.pidStr])
+      const children = childOutput
         .split('\n')
         .map((s) => s.trim())
         .filter(Boolean)
@@ -104,10 +112,11 @@ function findClaudeChildDarwin(shellPid: number): number | null {
   return null
 }
 
-function findClaudeChildLinux(shellPid: number): number | null {
+async function findClaudeChildLinux(shellPid: number): Promise<number | null> {
   let initialChildren: string[]
   try {
-    initialChildren = readFileSync(`/proc/${shellPid}/task/${shellPid}/children`, 'utf8')
+    const content = await readFile(`/proc/${shellPid}/task/${shellPid}/children`, 'utf8')
+    initialChildren = content
       .split(' ')
       .map((s) => s.trim())
       .filter(Boolean)
@@ -122,7 +131,7 @@ function findClaudeChildLinux(shellPid: number): number | null {
     if (item.depth >= CLAUDE_CHILD_MAX_DEPTH) continue
 
     try {
-      const cmdline = readFileSync(`/proc/${item.pidStr}/cmdline`, 'utf8')
+      const cmdline = await readFile(`/proc/${item.pidStr}/cmdline`, 'utf8')
       const parts = cmdline.split('\0').filter(Boolean)
       const binary = parts[0] ?? ''
       if (
@@ -137,7 +146,8 @@ function findClaudeChildLinux(shellPid: number): number | null {
 
     // Not claude — enqueue children for next level
     try {
-      const children = readFileSync(`/proc/${item.pidStr}/task/${item.pidStr}/children`, 'utf8')
+      const content = await readFile(`/proc/${item.pidStr}/task/${item.pidStr}/children`, 'utf8')
+      const children = content
         .split(' ')
         .map((s) => s.trim())
         .filter(Boolean)
