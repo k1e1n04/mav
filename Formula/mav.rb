@@ -1,8 +1,8 @@
 class Mav < Formula
   desc "Multi-agent view — manage multiple AI CLI sessions in one terminal"
   homepage "https://github.com/k1e1n04/mav"
-  url "https://github.com/k1e1n04/mav/archive/refs/tags/v0.1.34.tar.gz"
-  sha256 "f6d12dffda5a3fc194f4feacc84aa70b58b505b832f9cb7a34e657b659c2ed46"
+  url "https://github.com/k1e1n04/mav/archive/refs/tags/v0.1.35.tar.gz"
+  sha256 "c7bb59313887c3cd58910df6281864279a93609a3bd6f167218f6a8b3d091980"
   license "MIT"
   head "https://github.com/k1e1n04/mav.git", branch: "main"
 
