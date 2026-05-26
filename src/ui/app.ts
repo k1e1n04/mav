@@ -41,6 +41,10 @@ export class App {
 
     this.bindGlobalKeys()
 
+    this.manager.on('name', () => {
+      try { saveState(this.statePath, this.manager) } catch { /* ignore */ }
+    })
+
     this.terminal.onResize(() => {
       const cols = this.terminal.cols
       const rows = this.terminal.rows

@@ -1,3 +1,4 @@
+import { EventEmitter } from 'node:events'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 type KeyHandler = (str: string, key: { name?: string; ctrl?: boolean; sequence?: string }) => void
@@ -122,6 +123,14 @@ describe('App', () => {
       }
   })
 
+  function makeManager(overrides: { sessions?: unknown[]; selectedSession?: unknown } = {}) {
+    return Object.assign(new EventEmitter(), {
+      sessions: overrides.sessions ?? [],
+      selectedSession: overrides.selectedSession ?? null,
+      killAll: killAllMock,
+    })
+  }
+
   function emitKey(str: string, key: { name?: string; ctrl?: boolean; sequence?: string } = {}) {
     for (const handler of keypressHandlers) {
       handler(str, { sequence: str, ...key })
@@ -130,7 +139,7 @@ describe('App', () => {
 
   it('overviewでEnterすると詳細モードに入る', () => {
     const selectedSession = { id: 'claude-code#1', resize: vi.fn() }
-    const manager = { sessions: [selectedSession], selectedSession, killAll: killAllMock }
+    const manager = makeManager({ sessions: [selectedSession], selectedSession })
     const terminal = makeTerminal()
 
     new App(manager as never, '/tmp/state.json', terminal as never)
@@ -145,7 +154,7 @@ describe('App', () => {
 
   it('detailからoverviewへ戻るとalternate screenへ入る', () => {
     const selectedSession = { id: 'claude-code#1', resize: vi.fn() }
-    const manager = { sessions: [selectedSession], selectedSession, killAll: killAllMock }
+    const manager = makeManager({ sessions: [selectedSession], selectedSession })
     const terminal = makeTerminal()
     const app = new App(manager as never, '/tmp/state.json', terminal as never)
 
@@ -160,7 +169,7 @@ describe('App', () => {
 
   it('overview中のresizeではoverviewを再描画する', () => {
     const selectedSession = { id: 'claude-code#1', resize: vi.fn() }
-    const manager = { sessions: [selectedSession], selectedSession, killAll: killAllMock }
+    const manager = makeManager({ sessions: [selectedSession], selectedSession })
     const terminal = makeTerminal()
 
     new App(manager as never, '/tmp/state.json', terminal as never)
@@ -172,7 +181,7 @@ describe('App', () => {
 
   it('detail中のresizeではフルスクリーン寸法へ再調整する', () => {
     const selectedSession = { id: 'claude-code#1', resize: vi.fn() }
-    const manager = { sessions: [selectedSession], selectedSession, killAll: killAllMock }
+    const manager = makeManager({ sessions: [selectedSession], selectedSession })
     const terminal = makeTerminal()
 
     new App(manager as never, '/tmp/state.json', terminal as never)
@@ -185,7 +194,7 @@ describe('App', () => {
   it('overviewで新規セッション作成コールバックを受けるとそのセッション詳細へ移動する', () => {
     const initialSession = { id: 'claude-code#1', resize: vi.fn() }
     const addedSession = { id: 'codex#1', resize: vi.fn() }
-    const manager = { sessions: [initialSession, addedSession], selectedSession: initialSession, killAll: killAllMock }
+    const manager = makeManager({ sessions: [initialSession, addedSession], selectedSession: initialSession })
     const terminal = makeTerminal()
 
     new App(manager as never, '/tmp/state.json', terminal as never)
@@ -197,7 +206,7 @@ describe('App', () => {
 
   it('overviewの未処理キーはOverviewUIへ委譲する', () => {
     const selectedSession = { id: 'claude-code#1', resize: vi.fn() }
-    const manager = { sessions: [selectedSession], selectedSession, killAll: killAllMock }
+    const manager = makeManager({ sessions: [selectedSession], selectedSession })
     const terminal = makeTerminal()
 
     new App(manager as never, '/tmp/state.json', terminal as never)
@@ -208,7 +217,7 @@ describe('App', () => {
 
   it('overviewでq押下時にsaveStateが失敗しても終了処理を続行する', () => {
     const exitSpy = vi.spyOn(process, 'exit').mockImplementation((() => undefined) as never)
-    const manager = { sessions: [], selectedSession: null, killAll: killAllMock }
+    const manager = makeManager()
     const terminal = makeTerminal()
     saveStateMock.mockImplementationOnce(() => {
       throw new Error('disk full')
@@ -223,9 +232,22 @@ describe('App', () => {
     exitSpy.mockRestore()
   })
 
+  it('manager.nameイベント発火時にsaveStateを即座に呼ぶ', () => {
+    const manager = makeManager()
+    const terminal = makeTerminal()
+
+    new App(manager as never, '/tmp/state.json', terminal as never)
+    saveStateMock.mockClear()
+
+    manager.emit('name', 'claude-code#1', 'My Agent')
+
+    expect(saveStateMock).toHaveBeenCalledTimes(1)
+    expect(saveStateMock).toHaveBeenCalledWith('/tmp/state.json', manager)
+  })
+
   it('overviewでCtrl+C押下時に終了処理を続行する', () => {
     const exitSpy = vi.spyOn(process, 'exit').mockImplementation((() => undefined) as never)
-    const manager = { sessions: [], selectedSession: null, killAll: killAllMock }
+    const manager = makeManager()
     const terminal = makeTerminal()
 
     new App(manager as never, '/tmp/state.json', terminal as never)
