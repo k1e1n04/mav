@@ -5,6 +5,7 @@ import { OverviewUI } from '../src/ui/overview.js'
 class FakeTerminal {
   rendered = ''
   cols = 80
+  rows = 100
   render = vi.fn((content: string) => {
     this.rendered = content
   })
@@ -564,6 +565,142 @@ describe('OverviewUI', () => {
 
     expect(manager.selectedSession).toBe(waitingSession)
     expect(terminal.rendered).toContain('> ○ gemini-cli#1  waiting')
+  })
+
+  describe('スクロール', () => {
+    function makeSession(id: string, status = 'running') {
+      return { id, type: 'claude-code', displayName: id, status, logBuffer: [], write: vi.fn() }
+    }
+
+    function makeManager(sessions: ReturnType<typeof makeSession>[], selectedIndex = 0) {
+      const mgr = Object.assign(new EventEmitter(), {
+        sessions,
+        selectedIndex,
+        selectedSession: sessions[selectedIndex] ?? null,
+        selectSession(index: number) {
+          this.selectedIndex = index
+          this.selectedSession = this.sessions[index] ?? null
+          this.emit('selection', this.selectedSession)
+        },
+        addSession: vi.fn(),
+        removeSession: vi.fn(),
+      })
+      return mgr
+    }
+
+    it('コンテンツが rows に収まる場合はスクロール不要でインジケーターなし', () => {
+      const sessions = [makeSession('s1'), makeSession('s2')]
+      terminal.rows = 100
+      const manager = makeManager(sessions)
+      const ui = new OverviewUI(terminal as never, manager as never)
+      ui.show()
+
+      // スクロールインジケーターは "↑ N more" / "↓ N more" の形式
+      const plain = stripAnsi(terminal.rendered)
+      expect(plain).not.toContain('more')
+    })
+
+    it('コンテンツが rows を超えたら ↓ インジケーターが出る', () => {
+      const sessions = Array.from({ length: 8 }, (_, i) => makeSession(`s${i + 1}`))
+      terminal.rows = 8
+      const manager = makeManager(sessions)
+      const ui = new OverviewUI(terminal as never, manager as never)
+      ui.show()
+
+      const plain = stripAnsi(terminal.rendered)
+      expect(plain).toContain('↓ ')
+      expect(plain).not.toContain('↑ ')
+    })
+
+    it('選択中セッションは常にビューポート内に表示される', () => {
+      const sessions = Array.from({ length: 8 }, (_, i) => makeSession(`s${i + 1}`))
+      terminal.rows = 8
+      // 最後のセッションを選択した状態にする
+      const manager = makeManager(sessions, 7)
+      const ui = new OverviewUI(terminal as never, manager as never)
+      ui.show()
+
+      const plain = stripAnsi(terminal.rendered)
+      expect(plain).toContain('> ⣾ s8 (claude-code)  working')
+    })
+
+    it('下に移動して画面端を越えると自動スクロールする', () => {
+      const sessions = Array.from({ length: 8 }, (_, i) => makeSession(`s${i + 1}`))
+      terminal.rows = 8
+      const manager = makeManager(sessions, 0)
+      const ui = new OverviewUI(terminal as never, manager as never)
+      ui.show()
+
+      // 最後のセッションまで移動
+      for (let i = 0; i < 7; i++) {
+        ui.handleKeypress('', key('down'))
+      }
+
+      const plain = stripAnsi(terminal.rendered)
+      expect(plain).toContain('> ⣾ s8 (claude-code)  working')
+      expect(plain).toContain('↑ ')
+    })
+
+    it('上に戻ると ↑ インジケーターが消えて ↓ インジケーターが出る', () => {
+      const sessions = Array.from({ length: 8 }, (_, i) => makeSession(`s${i + 1}`))
+      terminal.rows = 8
+      const manager = makeManager(sessions, 0)
+      const ui = new OverviewUI(terminal as never, manager as never)
+      ui.show()
+
+      // 最後まで移動してから先頭へ戻る
+      for (let i = 0; i < 7; i++) {
+        ui.handleKeypress('', key('down'))
+      }
+      for (let i = 0; i < 7; i++) {
+        ui.handleKeypress('', key('up'))
+      }
+
+      const plain = stripAnsi(terminal.rendered)
+      expect(plain).toContain('> ⣾ s1 (claude-code)  working')
+      expect(plain).not.toContain('↑ ')
+      expect(plain).toContain('↓ ')
+    })
+
+    it('ビューポート内の行数が rows を超えない', () => {
+      const sessions = Array.from({ length: 8 }, (_, i) => makeSession(`s${i + 1}`))
+      terminal.rows = 8
+      const manager = makeManager(sessions, 0)
+      const ui = new OverviewUI(terminal as never, manager as never)
+      ui.show()
+
+      const lines = terminal.rendered.split('\n')
+      expect(lines.length).toBeLessThanOrEqual(8)
+    })
+
+    it('セッション数が多くてもリネームプロンプトは必ず表示される', () => {
+      // mainLines がターミナル高さを超える場合でも、プロンプトが viewport に含まれること
+      const sessions = Array.from({ length: 8 }, (_, i) => makeSession(`s${i + 1}`))
+      terminal.rows = 8
+      const session = sessions[0]!
+      const manager = Object.assign(new EventEmitter(), {
+        sessions,
+        selectedIndex: 0,
+        selectedSession: session,
+        selectSession(index: number) {
+          this.selectedIndex = index
+          this.selectedSession = this.sessions[index] ?? null
+          this.emit('selection', this.selectedSession)
+        },
+        addSession: vi.fn(),
+        removeSession: vi.fn(),
+      })
+      // setDisplayName がないと rename プロンプトが実行されないのでスタブを足す
+      Object.assign(session, { setDisplayName: vi.fn() })
+
+      const ui = new OverviewUI(terminal as never, manager as never)
+      ui.show()
+      ui.handleKeypress('e', key('e'))
+
+      const plain = stripAnsi(terminal.rendered)
+      // プロンプトの内容が viewport 内に表示されているはず
+      expect(plain).toContain('rename session')
+    })
   })
 
   it('e で選択中セッションの表示名を編集できる', () => {

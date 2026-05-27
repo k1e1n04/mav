@@ -44,6 +44,8 @@ export class OverviewUI {
   private promptState: PromptState = null
   private displaySessionIds: string[] = []
   private visible = false
+  private scrollOffset = 0
+  private selectedLineInMain = -1
 
   constructor(
     terminal: TerminalUI,
@@ -580,6 +582,8 @@ export class OverviewUI {
   }
 
   private buildMainLines(): string[] {
+    this.selectedLineInMain = -1
+
     const orderedSessions = this.getOrderedSessions()
     const selectedId = this.manager.selectedSession?.id
     const width = this.getContentWidth()
@@ -613,6 +617,9 @@ export class OverviewUI {
             `${prefix}${statusIcon} ${sessionLabel}  ${this.getStatusLabel(session.status)}`,
             width
           )
+          if (session.id === selectedId) {
+            this.selectedLineInMain = lines.length
+          }
           lines.push(session.id === selectedId
             ? this.color(sessionLine, OverviewUI.ANSI.bold, color)
             : this.color(sessionLine, color))
@@ -682,9 +689,73 @@ export class OverviewUI {
     return this.finalizeLines(lines)
   }
 
+  private adjustScrollForSelection(allLines: string[]): void {
+    const rows = this.terminal.rows
+    const total = allLines.length
+    const maxOffset = Math.max(0, total - rows)
+
+    if (this.selectedLineInMain >= 0) {
+      // margin=1: ↑/↓ indicators each occupy 1 row at the viewport edge
+      const margin = 1
+
+      if (this.selectedLineInMain < this.scrollOffset + margin) {
+        // Selection is above (or hidden behind) the ↑ indicator — scroll up.
+        // If the selection fits within the first page without being hidden by the ↓
+        // indicator, snap back to the top so the header is fully visible.
+        if (this.selectedLineInMain <= rows - margin - 1) {
+          this.scrollOffset = 0
+        } else {
+          this.scrollOffset = Math.max(0, this.selectedLineInMain - margin)
+        }
+      } else if (this.selectedLineInMain >= this.scrollOffset + rows - margin) {
+        // Selection is at or below the ↓ indicator row — scroll down.
+        this.scrollOffset = Math.min(maxOffset, this.selectedLineInMain - rows + margin + 1)
+      }
+    }
+
+    this.scrollOffset = Math.max(0, Math.min(this.scrollOffset, maxOffset))
+  }
+
   private render(): void {
     if (!this.visible) return
-    this.terminal.render([...this.buildMainLines(), ...this.buildPromptLines()].join('\n'))
+
+    const mainLines = this.buildMainLines()
+    const promptLines = this.buildPromptLines()
+    const allLines = [...mainLines, ...promptLines]
+    const rows = this.terminal.rows
+
+    if (!rows || allLines.length <= rows) {
+      this.scrollOffset = 0
+      this.terminal.render(allLines.join('\n'))
+      return
+    }
+
+    this.adjustScrollForSelection(allLines)
+
+    // When a prompt is open its lines sit at the bottom of allLines. If the
+    // scroll position was set to reveal the selected session, the prompt may
+    // fall entirely outside the viewport. Ensure the viewport always reaches
+    // the end of allLines when prompt lines are present.
+    if (promptLines.length > 0) {
+      const minForPrompt = allLines.length - rows
+      if (this.scrollOffset < minForPrompt) {
+        this.scrollOffset = minForPrompt
+      }
+    }
+
+    const viewport = allLines.slice(this.scrollOffset, this.scrollOffset + rows)
+
+    const overflowAbove = this.scrollOffset
+    const overflowBelow = allLines.length - (this.scrollOffset + rows)
+
+    if (overflowAbove > 0) {
+      viewport[0] = this.color(`  ↑ ${overflowAbove} more`, OverviewUI.ANSI.dim)
+    }
+    if (overflowBelow > 0) {
+      viewport[viewport.length - 1] = this.color(`  ↓ ${overflowBelow} more`, OverviewUI.ANSI.dim)
+    }
+
+    this.terminal.render(viewport.join('\n'))
   }
 
   show(): void {
