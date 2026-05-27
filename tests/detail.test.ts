@@ -212,4 +212,36 @@ describe('DetailUI', () => {
 
     expect(outputWrite).toHaveBeenCalledWith('\x1b[=7u')
   })
+
+  it('attach時に端末のソフトリセット(DECSTR)を送信してセッション間の状態汚染を防ぐ', () => {
+    ui.attach(session as never)
+    expect(outputWrite).toHaveBeenCalledWith('\x1b[!p')
+  })
+
+  it('別セッションのデータは端末に書き込まれない', () => {
+    const otherSession = Object.assign(new EventEmitter(), {
+      logBuffer: [],
+      write: vi.fn(),
+      resize: vi.fn(),
+    })
+
+    ui.attach(session as never)
+    outputWrite.mockClear()
+
+    otherSession.emit('data', 'contamination data from other session')
+
+    const writtenTexts = outputWrite.mock.calls.map((call) => call[0])
+    expect(writtenTexts).not.toContain('contamination data from other session')
+  })
+
+  it('detach後にセッションからデータが来ても端末に書き込まない', () => {
+    ui.attach(session as never)
+    ui.detach()
+    outputWrite.mockClear()
+
+    session.emit('data', 'late data after detach')
+
+    const writtenTexts = outputWrite.mock.calls.map((call) => call[0])
+    expect(writtenTexts).not.toContain('late data after detach')
+  })
 })

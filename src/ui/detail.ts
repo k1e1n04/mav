@@ -125,6 +125,10 @@ export class DetailUI {
       .join('')
       .replace(/\x1b\[\?104[79][hl]|\x1b\[\?47[hl]/g, '')
       .replace(/\x1b\[(?:>?\d*c|\?u|>q|\?\d+\$p)/g, '')
+    // DECSTR (Soft Terminal Reset) でセッション間の端末状態汚染を防ぐ。
+    // スクロール領域・SGR属性・カーソルモードなど前セッションが設定したモードをリセットし、
+    // 次セッションのログ再生に影響しないようにする。
+    this.terminal.write('\x1b[!p')
     if (this.keyboardEnhancementFlags) {
       this.terminal.write(`\x1b[=${this.keyboardEnhancementFlags}u`)
     }
@@ -133,7 +137,10 @@ export class DetailUI {
     this.terminal.write(DetailUI.EXIT_HINT)
     this.terminal.write(safeLog)
 
+    const attachedSession = session
     this.dataListener = (data: string) => {
+      // attach 後に detach や別セッションへの切り替えが発生した場合の防御的ガード
+      if (this.currentSession !== attachedSession) return
       this.terminal.write(data)
     }
     session.on('data', this.dataListener)
