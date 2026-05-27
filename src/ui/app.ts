@@ -71,7 +71,7 @@ export class App {
       return
     }
 
-    if (str === 'q') {
+    if (str === 'q' && !this.overviewUI.isPromptOpen()) {
       this.shutdown()
       return
     }
