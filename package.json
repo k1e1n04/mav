@@ -20,14 +20,12 @@
     "bin/",
     "lua/",
     "plugin/",
-    "scripts/",
     "LICENSE",
     "README.md"
   ],
   "scripts": {
     "build": "tsc && node scripts/postbuild.mjs",
     "dev": "tsx bin/mav.ts",
-    "postinstall": "node scripts/postinstall.mjs",
     "test": "vitest run",
     "test:watch": "vitest",
     "prepublishOnly": "pnpm test && pnpm build"
