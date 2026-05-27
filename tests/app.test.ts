@@ -10,6 +10,7 @@ const {
   overviewHideMock,
   overviewResizeSelectedSessionMock,
   overviewHandleKeypressMock,
+  isPromptOpenMock,
   detailShowMock,
   detailHideMock,
   detailAttachMock,
@@ -27,6 +28,7 @@ const {
     overviewHideMock: vi.fn(),
     overviewResizeSelectedSessionMock: vi.fn(),
     overviewHandleKeypressMock: vi.fn(),
+    isPromptOpenMock: vi.fn().mockReturnValue(false),
     detailShowMock: vi.fn(),
     detailHideMock: vi.fn(),
     detailAttachMock: vi.fn(),
@@ -50,7 +52,7 @@ vi.mock('../src/ui/overview.js', () => ({
         .__setOverviewSessionCreated?.(onSessionCreated)
     }
     isPromptOpen() {
-      return false
+      return isPromptOpenMock()
     }
     handleKeypress(str: string, key: unknown) {
       overviewHandleKeypressMock(str, key)
@@ -117,6 +119,7 @@ describe('App', () => {
     keypressHandlers.length = 0
     resizeHandlers.length = 0
     vi.clearAllMocks()
+    isPromptOpenMock.mockReturnValue(false)
     ;(globalThis as unknown as { __setOverviewSessionCreated?: (handler: (session: unknown) => void) => void })
       .__setOverviewSessionCreated = (handler) => {
         ;(triggerOverviewSessionCreated as unknown as { handler?: (session: unknown) => void }).handler = handler
@@ -243,6 +246,20 @@ describe('App', () => {
 
     expect(saveStateMock).toHaveBeenCalledTimes(1)
     expect(saveStateMock).toHaveBeenCalledWith('/tmp/state.json', manager)
+  })
+
+  it('renameプロンプトが開いている状態でqを押しても終了しない', () => {
+    const exitSpy = vi.spyOn(process, 'exit').mockImplementation((() => undefined) as never)
+    isPromptOpenMock.mockReturnValue(true)
+    const manager = makeManager()
+    const terminal = makeTerminal()
+
+    new App(manager as never, '/tmp/state.json', terminal as never)
+    emitKey('q', { name: 'q' })
+
+    expect(killAllMock).not.toHaveBeenCalled()
+    expect(exitSpy).not.toHaveBeenCalled()
+    exitSpy.mockRestore()
   })
 
   it('overviewでCtrl+C押下時に終了処理を続行する', () => {
